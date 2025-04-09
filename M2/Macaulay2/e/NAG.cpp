@@ -3,7 +3,11 @@
 // Anton Leykin's code in this file is in the public domain.
 
 #include "NAG.hpp"
-#include "matrix-con.hpp"
+
+#include "engine-includes.hpp" // need HAVE_DLFCN_H
+#include <M2/math-include.h>
+
+#include <time.h>
 #ifdef HAVE_DLFCN_H
 #include <dlfcn.h>
 #else
@@ -11,18 +15,18 @@
 #define dlsym(x, y) NULL
 #define dlclose(x) (-1)
 #endif
-#include <time.h>
-#include <exception>
+
+#include "interface/NAG.h"
 #include "lapack.hpp"
+#include "matrix-con.hpp"
+#include "matrix.hpp"
 #include "poly.hpp"
 #include "relem.hpp"
 
-// complex and complexAP
+class FreeModule;
 
-void complexAP::print() { printf("(%lf,%lf) ", getreal(), getimaginary()); }
 // Straight Line Program classes
 
-#ifdef SLPdouble
 // functions of the wrapper !!!
 StraightLineProgram /* or null */* StraightLineProgram::make(const PolyRing* R,
                                                              ring_elem e)
@@ -53,86 +57,27 @@ Matrix* StraightLineProgram::evaluate(const Matrix* vals)
 {
   return SLP<ComplexField>::evaluate(vals);
 }
-#endif
-
-#ifdef SLPmpfr
-
-// Same, but AP
-StraightLineProgram /* or null */* StraightLineProgram::make(const PolyRing* R,
-                                                             ring_elem e)
-{
-  StraightLineProgram* ret = static_cast<StraightLineProgram*>(
-      SLP<ComplexFieldArbitraryPrecision>::make(R, e));
-  return ret;
-}
-StraightLineProgram /* or null */* StraightLineProgram::make(
-    const Matrix* consts,
-    M2_arrayint program)
-{
-  StraightLineProgram* ret = static_cast<StraightLineProgram*>(
-      SLP<ComplexFieldArbitraryPrecision>::make(consts, program));
-  return ret;
-}
-void StraightLineProgram::text_out(buffer& o) const
-{
-  SLP<ComplexFieldArbitraryPrecision>::text_out(o);
-}
-void StraightLineProgram::evaluate(int n, const complex* values, complex* out)
-{
-  complexAP outAP[num_out()];
-  complexAP valuesAP[n];
-  for (int i = 0; i < n; i++) valuesAP[i] = complexAP(values[i]);
-  SLP<ComplexFieldArbitraryPrecision>::evaluate(n, valuesAP, outAP);
-  for (int i = 0; i < num_out(); i++) out[i] = outAP[i].to_complex();
-}
-void StraightLineProgram::evaluate(int n,
-                                   const element_type* values,
-                                   element_type* out)
-{
-  SLP<ComplexFieldArbitraryPrecision>::evaluate(n, values, out);
-}
-
-Matrix* StraightLineProgram::evaluate(const Matrix* vals)
-{
-  return SLP<ComplexFieldArbitraryPrecision>::evaluate(vals);
-}
-#endif
 
 template <class Field>
 SLP<Field>::SLP()
 {
-  C = NULL;
-  handle = NULL;
+  C = nullptr;
+  handle = nullptr;
   eval_time = 0;
   n_calls = 0;
-  nodes = NULL;
+  nodes = nullptr;
 }
 
-#ifdef SLPdouble
 template <class Field>
 SLP<Field>::~SLP()
 {
-  delete nodes;
-  if (handle != NULL)
+  freemem(nodes);
+  if (handle != nullptr)
     {
       printf("closing library\n");
       dlclose(handle);
     }
 }
-#endif
-
-#ifdef SLPmpfr
-template <class Field>
-SLP<Field>::~SLP()
-{
-  delete[] nodes;
-  if (handle != NULL)
-    {
-      printf("closing library\n");
-      dlclose(handle);
-    }
-}
-#endif
 
 template <class Field>
 int SLP<Field>::num_slps = 0;
@@ -148,12 +93,12 @@ SLP<Field> /* or null */* SLP<Field>::make(const Matrix* m_consts,
   if (num_slps > MAX_NUM_SLPs)
     {
       ERROR("max number of slps exceeded");
-      res = NULL;
+      res = nullptr;
     }
   else if (program->len < 3)
     {
       ERROR("invalid SLP");
-      res = NULL;
+      res = nullptr;
     }
   else
     {
@@ -177,7 +122,7 @@ SLP<Field> /* or null */* SLP<Field>::make(const Matrix* m_consts,
                          res->num_consts + res->num_inputs +
                              res->rows_out * res->cols_out);
               char libname[100];
-              sprintf(libname,
+              snprintf(libname, 100,
                       "%s%d.dylib",
                       libPREFIX,
                       program->array[5]);  // Mac OS
@@ -186,10 +131,10 @@ SLP<Field> /* or null */* SLP<Field>::make(const Matrix* m_consts,
               const char* funname = "slpFN";
               printf("loading slpFN from %s\n", libname);
               res->handle = dlopen(libname, RTLD_LAZY | RTLD_GLOBAL);
-              if (res->handle == NULL) ERROR("can't load library %s", libname);
+              if (res->handle == nullptr) ERROR("can't load library %s", libname);
               res->compiled_fn = (void (*)(element_type*, element_type*))dlsym(
                   res->handle, funname);
-              if (res->compiled_fn == NULL)
+              if (res->compiled_fn == nullptr)
                 ERROR(
                     "can't link function %s from library %s", funname, libname);
             }
@@ -213,21 +158,11 @@ SLP<Field> /* or null */* SLP<Field>::make(const Matrix* m_consts,
   return res;
 }
 
-#ifdef SLPdouble
 template <class Field>
 void SLP<Field>::make_nodes(element_type*& a, int size)
 {
-  a = newarray_atomic(complex, size);
+  a = newarray_atomic(element_type, size);
 }
-#endif
-
-#ifdef SLPmpfr
-template <class Field>
-void SLP<Field>::make_nodes(element_type*& a, int size)
-{
-  a = new element_type[size];
-}
-#endif
 
 template <class Field>
 SLP<Field> /* or null */* SLP<Field>::copy()
@@ -240,7 +175,7 @@ SLP<Field> /* or null */* SLP<Field>::copy()
   make_nodes(res->nodes, num_consts + num_inputs + num_operations);
   for (int i = 0; i < num_consts; i++) res->nodes[i] = nodes[i];
   res->node_index = node_index;  // points to position in program (rel. to
-                                 // start) of operation correspoding to a node
+                                 // start) of operation corresponding to a node
   res->num_consts = num_consts;
   res->num_inputs = num_inputs;
   res->num_operations = num_operations;
@@ -258,10 +193,10 @@ Nterm* extract_divisible_by_x(Nterm*& ff, int i)  // auxiliary
   /* Extracts into fx the terms divisible by the (n-1-i)-th variable "x"
      and divides them by x. (exponent vectors are assumed to be reversed)
      Note: terms in fx may not be in monomial order. */
-  Nterm* fx = NULL;
+  Nterm* fx = nullptr;
   Nterm* f = ff;
-  Nterm* prev_f = NULL;
-  while (f != NULL)
+  Nterm* prev_f = nullptr;
+  while (f != nullptr)
     {
       if (f->monom[i] == 0)
         {
@@ -271,7 +206,7 @@ Nterm* extract_divisible_by_x(Nterm*& ff, int i)  // auxiliary
       else
         {
           f->monom[i]--;  // divide by x
-          if (prev_f != NULL)
+          if (prev_f != nullptr)
             {
               prev_f->next = f->next;  // extract
             }
@@ -281,14 +216,14 @@ Nterm* extract_divisible_by_x(Nterm*& ff, int i)  // auxiliary
             }
           f->next = fx;  // prepend to fx
           fx = f;
-          f = (prev_f == NULL) ? ff : prev_f->next;
+          f = (prev_f == nullptr) ? ff : prev_f->next;
         }
     }
   return fx;
 }
 
 template <class Field>
-int add_constant_get_position(VECTOR(typename Field::element_type) & consts,
+int add_constant_get_position(gc_vector<typename Field::element_type>& consts,
                               typename Field::element_type c)  // auxiliary
 {
   //!!! smarter implementation coming !!!
@@ -300,8 +235,8 @@ int add_constant_get_position(VECTOR(typename Field::element_type) & consts,
  * operation */
 template <class Field>
 int SLP<Field>::poly_to_horner_slp(int n,
-                                   intarray& prog,
-                                   VECTOR(element_type) & consts,
+                                   gc_vector<int>& prog,
+                                   gc_vector<element_type>& consts,
                                    Nterm*& f)  // auxiliary
 {
   int part_pos[n];  // absolute positions of the parts
@@ -309,44 +244,44 @@ int SLP<Field>::poly_to_horner_slp(int n,
   for (int i = 0; i < n; i++)
     {
       Nterm* fx = extract_divisible_by_x(f, i);
-      if (fx == NULL)
+      if (fx == nullptr)
         part_pos[i] = ZERO_CONST;
       else
         {
           int p = poly_to_horner_slp(n, prog, consts, fx);
           last_nonzero_part_pos = part_pos[i] = num_operations++;
-          node_index.append(prog.length());
-          prog.append(slpPRODUCT);
-          prog.append(n - 1 - i);  // reference to (n-1-i)-th input (recall: the
+          node_index.push_back(prog.size());
+          prog.push_back(slpPRODUCT);
+          prog.push_back(n - 1 - i);  // reference to (n-1-i)-th input (recall: the
                                    // order of vars is reversed in monomials)
-          prog.append(p - part_pos[i]);  // relative position of p
+          prog.push_back(p - part_pos[i]);  // relative position of p
         }
     }
   int c = 0;  // count nonzeros
-  if (f != NULL) c++;
+  if (f != nullptr) c++;
   for (int i = 0; i < n; i++)
     if (part_pos[i] != ZERO_CONST) c++;
   if (c == 0) return ZERO_CONST;
   if (c == 1 && last_nonzero_part_pos != ZERO_CONST)
     return last_nonzero_part_pos;
   int cur_p = num_operations++;
-  node_index.append(prog.length());
-  prog.append(slpMULTIsum);
-  prog.append(c);
-  if (f != NULL)
-    prog.append(CONST_OFFSET +
+  node_index.push_back(prog.size());
+  prog.push_back(slpMULTIsum);
+  prog.push_back(c);
+  if (f != nullptr)
+    prog.push_back(CONST_OFFSET +
                 add_constant_get_position<Field>(
                     consts, element_type(toBigComplex(C, f->coeff))));
   for (int i = 0; i < n; i++)
     if (part_pos[i] != ZERO_CONST)
-      prog.append(part_pos[i] - cur_p);  // relative position of the i-th part
+      prog.push_back(part_pos[i] - cur_p);  // relative position of the i-th part
   return cur_p;
 }
 
-void monomials_to_conventional_exponent_vectors(int n, Nterm* f)  // auxiliary
+void monomials_to_conventional_expvectors(int n, Nterm* f)  // auxiliary
 /* "unpack" monomials */
 {
-  for (; f != NULL; f = f->next)
+  for (; f != nullptr; f = f->next)
     for (int i = 0; i < n - 1; i++) f->monom[i] -= f->monom[i + 1];
 }
 
@@ -358,7 +293,7 @@ SLP<Field> /* or null */* SLP<Field>::make(const PolyRing* R, ring_elem e)
   if (num_slps > MAX_NUM_SLPs)
     {
       ERROR("max number of slps exceeded");
-      res = NULL;
+      res = nullptr;
     }
   else
     {
@@ -369,39 +304,39 @@ SLP<Field> /* or null */* SLP<Field>::make(const PolyRing* R, ring_elem e)
       res->num_operations = 0;
       res->rows_out = 1;
       res->cols_out = 1;
-      intarray prog;
-      VECTOR(element_type) consts;
+      gc_vector<int> prog;
+      gc_vector<element_type> consts;
 
       // make prog and node
       e = R->copy(e); /* a copy of "e" will be decomposed;
                          how to remove the pieces afterwards?
                          R->remove(...) is an empty function */
       Nterm* f = e.get_poly();
-      monomials_to_conventional_exponent_vectors(n, f);
+      monomials_to_conventional_expvectors(n, f);
       int out = res->poly_to_horner_slp(n, prog, consts, f);
       if (out == ZERO_CONST)
         {
           out = res->num_operations++;
-          res->node_index.append(prog.length());
-          prog.append(slpMULTIsum);
-          prog.append(0);  // sum with zero summands
+          res->node_index.push_back(prog.size());
+          prog.push_back(slpMULTIsum);
+          prog.push_back(0);  // sum with zero summands
         }
 
       // make program
       res->program = M2_makearrayint(
-          prog.length() + 2 /* accounts for lines +2,+3 */ + SLP_HEADER_LEN);
+          prog.size() + 2 /* accounts for lines +2,+3 */ + SLP_HEADER_LEN);
       res->program->array[0] = res->num_consts =
           static_cast<int>(consts.size());
-      prog.append(slpEND);
-      prog.append(out + res->num_consts +
+      prog.push_back(slpEND);
+      prog.push_back(out + res->num_consts +
                   res->num_inputs);  // position of the output
 
       res->program->array[1] = res->num_inputs;
       res->program->array[2] = res->rows_out;
       res->program->array[3] = res->cols_out;
       memcpy(res->program->array + SLP_HEADER_LEN,
-             prog.raw(),
-             sizeof(int) * prog.length());
+             prog.data(),
+             sizeof(int) * prog.size());
 
       // make nodes: [constants, inputs, operations]
       make_nodes(res->nodes,
@@ -421,7 +356,7 @@ SLP<Field> /* or null */* SLP<Field>::concatenate(const SLP<Field>* slp)
       num_inputs != slp->num_inputs || rows_out != slp->rows_out)
     {
       ERROR("slps unstackable");
-      return NULL;
+      return nullptr;
     }
   int num_outputs = rows_out * cols_out;
   int* end_program = program->array + program->len - num_outputs;
@@ -439,7 +374,7 @@ SLP<Field> /* or null */* SLP<Field>::concatenate(const SLP<Field>* slp)
   res->rows_out = rows_out;
   res->cols_out = cols_out + slp->cols_out;
 
-  //  VECTOR(element_type) consts; // !!! use to optimize constants
+  //  gc_vector<element_type> consts; // !!! use to optimize constants
 
   // make program
   res->program = M2_makearrayint(program->len + slp_len - 1 + slp_num_outputs);
@@ -475,7 +410,7 @@ SLP<Field> /* or null */* SLP<Field>::concatenate(const SLP<Field>* slp)
     *a += num_consts + num_operations;  //!!! assume: appending constants
   for (int i = 0; i < slp->num_operations; i++)
     // shift by the size of "operations" part of this->program
-    res->node_index.append(slp->node_index[i] + program->len - SLP_HEADER_LEN -
+    res->node_index.push_back(slp->node_index[i] + program->len - SLP_HEADER_LEN -
                            num_outputs - 1);
 
   res->program->array[0] = res->num_consts =
@@ -496,7 +431,7 @@ SLP<Field> /* or null */* SLP<Field>::concatenate(const SLP<Field>* slp)
 
 /* ref = reference to a node rel. n */
 template <class Field>
-int SLP<Field>::diffPartReference(int n, int ref, int v, intarray& prog)
+int SLP<Field>::diffPartReference(int n, int ref, int v, gc_vector<int>& prog)
 {
   if (ref < 0)
     return diffNodeInput(n + ref, v, prog);
@@ -512,7 +447,9 @@ int SLP<Field>::diffPartReference(int n, int ref, int v, intarray& prog)
 }
 
 template <class Field>
-int SLP<Field>::diffNodeInput(int n, int v, intarray& prog)  // used by jacobian
+int SLP<Field>::diffNodeInput(int n,
+                              int v,
+                              gc_vector<int>& prog)  // used by jacobian
 {
   int i = node_index[n];
   switch (prog[i])
@@ -537,13 +474,13 @@ int SLP<Field>::diffNodeInput(int n, int v, intarray& prog)  // used by jacobian
           if (c == 0) return ZERO_CONST;
           if (c == 1) return last_non_zero;
           int cur_p = num_operations++;
-          node_index.append(prog.length());
-          prog.append(slpMULTIsum);
-          prog.append(c);
+          node_index.push_back(prog.size());
+          prog.push_back(slpMULTIsum);
+          prog.push_back(c);
           for (int j = 0; j < n_summands; j++)
             {
               if (part_pos[j] != ZERO_CONST)
-                prog.append(part_pos[j] -
+                prog.push_back(part_pos[j] -
                             cur_p);  // relative position of the j-th part
             }
           return cur_p;
@@ -564,9 +501,9 @@ int SLP<Field>::diffNodeInput(int n, int v, intarray& prog)  // used by jacobian
                   else if (b >= CONST_OFFSET)
                     {  // ... constant
                       int cur_p = num_operations++;
-                      node_index.append(prog.length());
-                      prog.append(slpCOPY);  // is there better way?
-                      prog.append(b);
+                      node_index.push_back(prog.size());
+                      prog.push_back(slpCOPY);  // is there better way?
+                      prog.push_back(b);
                       return cur_p;
                     }
                   else
@@ -578,12 +515,12 @@ int SLP<Field>::diffNodeInput(int n, int v, intarray& prog)  // used by jacobian
               else
                 {
                   int cur_p = num_operations++;
-                  node_index.append(prog.length());
-                  prog.append(slpPRODUCT);
-                  prog.append(da - cur_p);
+                  node_index.push_back(prog.size());
+                  prog.push_back(slpPRODUCT);
+                  prog.push_back(da - cur_p);
                   if (b < 0)            // if refers to an operation node
                     b = n + b - cur_p;  // recalculate wrt cur_p
-                  prog.append(b);
+                  prog.push_back(b);
                   return cur_p;
                 }
             }
@@ -596,11 +533,11 @@ int SLP<Field>::diffNodeInput(int n, int v, intarray& prog)  // used by jacobian
                   else if (a >= CONST_OFFSET)
                     {  // ... constant
                       int cur_p = num_operations++;
-                      node_index.append(prog.length());
-                      prog.append(slpCOPY);  // is there a better way ?
+                      node_index.push_back(prog.size());
+                      prog.push_back(slpCOPY);  // is there a better way ?
                       if (a < 0)             // if refers to an operation node
                         a = n + a - cur_p;   // recalculate wrt cur_p
-                      prog.append(a);
+                      prog.push_back(a);
                       return cur_p;
                     }
                   else
@@ -612,12 +549,12 @@ int SLP<Field>::diffNodeInput(int n, int v, intarray& prog)  // used by jacobian
               else
                 {  // db!=0 and db!=1
                   int cur_p = num_operations++;
-                  node_index.append(prog.length());
-                  prog.append(slpPRODUCT);
-                  prog.append(db - cur_p);
+                  node_index.push_back(prog.size());
+                  prog.push_back(slpPRODUCT);
+                  prog.push_back(db - cur_p);
                   if (a < 0)            // if refers to an operation node
                     a = n + a - cur_p;  // recalculate wrt cur_p
-                  prog.append(a);
+                  prog.push_back(a);
                   return cur_p;
                 }
             }
@@ -628,12 +565,12 @@ int SLP<Field>::diffNodeInput(int n, int v, intarray& prog)  // used by jacobian
               if (is_part1_created)
                 {
                   int cur_p = num_operations++;
-                  node_index.append(prog.length());
-                  prog.append(slpPRODUCT);
-                  prog.append(da - cur_p);
+                  node_index.push_back(prog.size());
+                  prog.push_back(slpPRODUCT);
+                  prog.push_back(da - cur_p);
                   if (b < 0)            // if refers to an operation node
                     b = n + b - cur_p;  // recalculate wrt cur_p
-                  prog.append(b);
+                  prog.push_back(b);
                   part1 = cur_p;
                 }
               int part2 = ZERO_CONST;
@@ -641,26 +578,26 @@ int SLP<Field>::diffNodeInput(int n, int v, intarray& prog)  // used by jacobian
               if (is_part2_created)
                 {
                   int cur_p = num_operations++;
-                  node_index.append(prog.length());
-                  prog.append(slpPRODUCT);
-                  prog.append(db - cur_p);
+                  node_index.push_back(prog.size());
+                  prog.push_back(slpPRODUCT);
+                  prog.push_back(db - cur_p);
                   if (a < 0)            // if refers to an operation node
                     a = n + a - cur_p;  // recalculate wrt cur_p
-                  prog.append(a);
+                  prog.push_back(a);
                   part2 = cur_p;
                 }
               int cur_p = num_operations++;
-              node_index.append(prog.length());
-              prog.append(slpMULTIsum);
-              prog.append(2);
+              node_index.push_back(prog.size());
+              prog.push_back(slpMULTIsum);
+              prog.push_back(2);
               if (is_part1_created)
-                prog.append(part1 - cur_p);
+                prog.push_back(part1 - cur_p);
               else
-                prog.append((b < 0) ? b + n - cur_p : b);
+                prog.push_back((b < 0) ? b + n - cur_p : b);
               if (is_part2_created)
-                prog.append(part2 - cur_p);
+                prog.push_back(part2 - cur_p);
               else
-                prog.append((a < 0) ? a + n - cur_p : a);
+                prog.push_back((a < 0) ? a + n - cur_p : a);
               return cur_p;
             }
         }
@@ -682,7 +619,7 @@ SLP<Field> /* or null */* SLP<Field>::jacobian(bool makeHxH,
   if (rows_out != 1)
     {
       ERROR("1-row slp expected");
-      return NULL;
+      return nullptr;
     };
 
   int num_outputs = rows_out * cols_out;
@@ -696,12 +633,13 @@ SLP<Field> /* or null */* SLP<Field>::jacobian(bool makeHxH,
   res->rows_out = num_inputs;
   res->cols_out = cols_out;
 
-  //  VECTOR(element_type) consts; // !!! use to optimize constants
-  intarray prog(program->len);
+  //  gc_vector<element_type> consts; // !!! use to optimize constants
+  gc_vector<int> prog;
+  prog.reserve(program->len);
   for (int i = SLP_HEADER_LEN;
        i < program->len - num_outputs - 1 /*for slpEND*/;
        i++)
-    prog.append(program->array[i]);
+    prog.push_back(program->array[i]);
   res->node_index = node_index;
 
   int out_pos[res->rows_out *
@@ -715,26 +653,26 @@ SLP<Field> /* or null */* SLP<Field>::jacobian(bool makeHxH,
                              i,
                              prog);  // uses res->num_operations
   // make program
-  res->program = M2_makearrayint(SLP_HEADER_LEN + prog.length() + 1 +
+  res->program = M2_makearrayint(SLP_HEADER_LEN + prog.size() + 1 +
                                  res->rows_out * res->cols_out);
   res->program->array[0] = res->num_consts =
       num_consts + 1;  //!!! assume: appending ZERO
   res->program->array[1] = res->num_inputs;
   res->program->array[2] = res->rows_out;
   res->program->array[3] = res->cols_out;
-  prog.append(slpEND);
+  prog.push_back(slpEND);
   for (int i = 0; i < num_inputs; i++)
     for (int j = 0; j < num_outputs; j++)
       {
         int t = out_pos[i * res->cols_out + j];
-        prog.append((t == ZERO_CONST)
+        prog.push_back((t == ZERO_CONST)
                         ? num_consts /*ref to ZERO*/
                         : t + res->num_consts +
                               num_inputs);  // position of the output
       }
   memcpy(res->program->array + SLP_HEADER_LEN,
-         prog.raw(),
-         sizeof(int) * prog.length());
+         prog.data(),
+         sizeof(int) * prog.size());
 
   // make nodes: [constants, inputs, operations]
   make_nodes(res->nodes,
@@ -776,7 +714,7 @@ void SLP<Field>::evaluate(int n, const element_type* values, element_type* ret)
 {
   if (n != num_inputs) ERROR("wrong number of inputs");
 
-  element_type* out = NULL;   // used by compiledSLP
+  element_type* out = nullptr;   // used by compiledSLP
   int out_entries_shift = 0;  // position of "out matrix"
 
   int cur_node = num_consts;
@@ -854,7 +792,7 @@ void SLP<Field>::evaluate(int n, const element_type* values, element_type* ret)
         copy_complex_array<Field>(rows_out * cols_out, out, ret);
         break;
       default:
-        // interptretation
+        // interpretation
         element_type* c = ret;
         for (i = 0; i < rows_out; i++)
           for (int j = 0; j < cols_out; j++, c++)
@@ -866,7 +804,7 @@ void SLP<Field>::evaluate(int n, const element_type* values, element_type* ret)
 template <class Field>
 Matrix* SLP<Field>::evaluate(const Matrix* values)
 {
-  element_type* out = NULL;   // used by compiledSLP
+  element_type* out = nullptr;   // used by compiledSLP
   int out_entries_shift = 0;  // position of "out matrix" in slp->program
 
   int cur_node = num_consts;
@@ -880,16 +818,6 @@ Matrix* SLP<Field>::evaluate(const Matrix* values)
 
   switch (program->array[4])
     {
-      /* obsolete !!!
-    case slpPREDICTOR:
-      out = nodes+num_consts+num_inputs;
-      predictor();
-      break;
-    case slpCORRECTOR:
-      out = nodes+num_consts+num_inputs;
-      corrector();
-      break;
-      */
       case slpCOMPILED:
         // evaluation via dynamically linked function
         // input: nodes (shifted by number of consts)
@@ -928,7 +856,7 @@ Matrix* SLP<Field>::evaluate(const Matrix* values)
                   break;
                 default:
                   ERROR("unknown SLP operation");
-                  return NULL;
+                  return nullptr;
               }
           }
         out_entries_shift = i + 1;
@@ -958,26 +886,19 @@ Matrix* SLP<Field>::evaluate(const Matrix* values)
             for (int j = 0; j < cols_out; j++, c++)
               {
                 // printf("%lf %lf \n", c->getreal(), c->getimaginary());
-
-                // mpfr_set_d(re, c->getreal(), GMP_RNDN);
-                // mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
-                // ring_elem e = from_BigReals(R,re,im);
                 ring_elem e = from_doubles(R, c->getreal(), c->getimaginary());
 
                 mat.set_entry(i, j, e);
               }
         }
         break;
-      default:  // interptretation
+      default:  // interpretation
         for (i = 0; i < rows_out; i++)
           for (int j = 0; j < cols_out; j++)
             {
               element_type c =
                   nodes[program->array[i * cols_out + j + out_entries_shift]];
 
-              // mpfr_set_d(re, c.getreal(), GMP_RNDN);
-              // mpfr_set_d(im, c.getimaginary(), GMP_RNDN);
-              // ring_elem e = from_BigReals(R,re,im);
               ring_elem e = from_doubles(R, c.getreal(), c.getimaginary());
 
               mat.set_entry(i, j, e);
@@ -1056,7 +977,7 @@ void SLP<Field>::text_out(buffer& o) const
   for (i = 0; i < num_consts; i++, cur_node++)
     {
       char s[100];
-      nodes[cur_node].sprint(s);
+      nodes[cur_node].snprint(s, 100);
       o << s << ", ";
     }
   o << newline;
@@ -1183,15 +1104,15 @@ void SLP<Field>::text_out(buffer& o) const
 //     add_to_complex_array(n,dx4,dx3);
 //     multiply_complex_array_scalar(n,dx4,1.0/6);
 //     copy_complex_array<ComplexField>(n,dx4,dx);
-//     deletearray(dx1);
-//     deletearray(dx2);
-//     deletearray(dx3);
-//     deletearray(dx4);
+//     freemem(dx1);
+//     freemem(dx2);
+//     freemem(dx3);
+//     freemem(dx4);
 //   } break;
 //   default: ERROR("unknown predictor");
 //   };
-//   deletearray(LHS);
-//   deletearray(RHS);
+//   freemem(LHS);
+//   freemem(RHS);
 // }
 
 // template <class Field>
@@ -1231,9 +1152,9 @@ i<maxCorSteps);
 
 //   copy_complex_array<ComplexField>(n,x1t,x1);
 
-//   deletearray(x1t);
-//   deletearray(LHS);
-//   deletearray(RHS);
+//   freemem(x1t);
+//   freemem(LHS);
+//   freemem(RHS);
 // }
 */
 
@@ -1252,7 +1173,7 @@ bool solve_via_lapack(int size,
   int info;
 
   int* permutation = newarray_atomic(int, size);
-  complex* At = newarray(complex, size * size);
+  complex* At = newarray_atomic(complex, size * size);
   int i, j;
   for (i = 0; i < size; i++)
     for (j = 0; j < size; j++)  // transpose the matrix: lapack solves A^t x = b
@@ -1287,8 +1208,8 @@ bool solve_via_lapack(int size,
       ret = false;
     }
 
-  deletearray(permutation);
-  deletearray(At);
+  freemem(permutation);
+  freemem(At);
 
   return ret;
 }
@@ -1338,7 +1259,7 @@ bool solve_via_lapack_without_transposition(
       ret = false;
     }
 
-  deletearray(permutation);
+  freemem(permutation);
 
   return ret;
 }
@@ -1403,12 +1324,12 @@ bool cond_number_via_svd(int size, complex* A, double& cond)
       // printf("(s_large=%lf, s_small=%lf)\n", sigma[0], sigma[size-1]);
     }
 
-  deletearray(workspace);
-  deletearray(rwork);
-  // deletearray(copyA);
-  deletearray(u);
-  deletearray(vt);
-  deletearray(sigma);
+  freemem(workspace);
+  freemem(rwork);
+  // freemem(copyA);
+  freemem(u);
+  freemem(vt);
+  freemem(sigma);
 
   return ret;
 }
@@ -1476,118 +1397,17 @@ bool norm_of_inverse_via_svd(int size, complex* A, double& norm)
       norm = 1 / sigma[size - 1];
     }
 
-  deletearray(workspace);
-  deletearray(rwork);
-  // deletearray(copyA);
-  deletearray(u);
-  deletearray(vt);
-  deletearray(sigma);
+  freemem(workspace);
+  freemem(rwork);
+  // freemem(copyA);
+  freemem(u);
+  freemem(vt);
+  freemem(sigma);
 
   return ret;
 }
 
 // END lapack-based routines
-
-// mpack routines
-#if HAVE_MPACK
-bool solve_via_mpack_without_transposition(
-    int size,
-    complexAP* A,  // size-by-size matrix of complex #s
-    int bsize,
-    complexAP* B,  // bsize-by-size RHS of Ax=b
-    complexAP* x   // solution
-    )
-{
-  bool ret = true;
-  mpackint infomp;
-
-  mpackint ipiv[size * 2];
-
-  // the sizes of _real_ matrices that rempresent complex A and B
-  int A_size = 4 * size * size;
-  int B_size = size * 2 * bsize;
-  mpreal* Amp = newarray_atomic(mpreal, A_size);
-  mpreal* Bmp = newarray_atomic(mpreal, B_size);
-
-  for (int i = 0; i < size; i++)
-    for (int j = 0; j < size; j++)
-      new (Amp + i * 2 * size + j) mpreal(A[i * size + j].value.re);
-  for (int i = size; i < size * 2; i++)
-    for (int j = 0; j < size; j++)
-      new (Amp + i * 2 * size + j)
-          mpreal((-1) * mpreal(A[(i - size) * size + j].value.im));
-  for (int i = 0; i < size; i++)
-    for (int j = size; j < size * 2; j++)
-      new (Amp + i * 2 * size + j) mpreal(A[i * size + (j - size)].value.im);
-  for (int i = size; i < size * 2; i++)
-    for (int j = size; j < size * 2; j++)
-      new (Amp + i * 2 * size + j)
-          mpreal(A[(i - size) * size + (j - size)].value.re);
-  for (int i = 0; i < bsize; i++)
-    for (int j = 0, l = 0; j < size; j++, l++)
-      new (Bmp + i * size * 2 + j) mpreal(B[i * size + l].value.re);
-  for (int i = 0; i < bsize; i++)
-    for (int j = size, l = 0; j < size * 2; j++, l++)
-      new (Bmp + i * size * 2 + j) mpreal(B[i * size + l].value.im);
-
-  //   printf("-----------(solve)-----------------------------------\n");
-  //   printf("\nA:\n");
-  //   for (int i=0; i<size*size; i++)
-  //     A[i].print();
-  //   printf("\nb:\n");
-  //   for (int i=0; i<size; i++)
-  //     B[i].print();
-  //   printf("\nA:\n");
-  //   for (int i=0; i<4*size*size; i++)
-  //     printf("%lf ", (double) Amp[i]);
-  //   printf("\nb:\n");
-  //   for (int i=0; i<2*size; i++)
-  //     printf("%lf ", (double) Bmp[i]);
-  try
-    {
-      Rgesv(size * 2, bsize, Amp, size * 2, ipiv, Bmp, size * 2, &infomp);
-      //     printf("\nx:\n");
-      //     for (int i=0; i<2*size; i++)
-      //       printf("%lf ", (double) Bmp[i]);
-  } catch (...)
-    {
-      infomp = 1000;
-  }
-  if (infomp > 0)
-    {
-      ERROR("according to Rgesv, matrix is singular");
-      ret = false;
-    }
-  else if (infomp < 0)
-    {
-      ERROR("argument passed to zgesv had an illegal value");
-      ret = false;
-    }
-  else
-    {
-      for (int i = 0; i < bsize; i++)
-        for (int j = 0; j < size; j++)
-          {
-            mpfr_set(x[i * size + j].value.re,
-                     (Bmp[i * size * 2 + j].getmp())[0],
-                     GMP_RNDN);
-            mpfr_set(x[i * size + j].value.im,
-                     (Bmp[i * size * 2 + j + size].getmp())[0],
-                     GMP_RNDN);
-          }
-    }
-  deletearray(Amp);
-  deletearray(Bmp);
-
-  //   printf("\nx:\n");
-  //   for (int i=0; i<size; i++)
-  //     x[i].print();
-  //   printf("\n");
-  return ret;
-}
-#endif
-
-// END mpack routines
 
 ////////////////// PathTracker
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1597,16 +1417,16 @@ PathTracker* PathTracker::catalog[MAX_NUM_PATH_TRACKERS];
 
 PathTracker::PathTracker()
 {
-  raw_solutions = NULL;
-  solutions = NULL;
-  DMforPN = NULL;
+  raw_solutions = nullptr;
+  solutions = nullptr;
+  DMforPN = nullptr;
 }
 
 PathTracker::~PathTracker()
 {
   for (int i = 0; i < n_sols; i++) raw_solutions[i].release();
-  deletearray(raw_solutions);
-  deletearray(DMforPN);
+  freemem(raw_solutions);
+  freemem(DMforPN);
 }
 
 // creates a PathTracker object (case: is_projective), builds slps for predictor
@@ -1620,14 +1440,14 @@ PathTracker /* or null */* PathTracker::make(const Matrix* S,
   if (S->n_rows() != 1 || T->n_rows() != 1)
     {
       ERROR("1-row matrices expected");
-      return NULL;
+      return nullptr;
     };
   PathTracker* p = new PathTracker;
   const PolyRing* R = p->homotopy_R = S->get_ring()->cast_to_PolyRing();
-  if (R == NULL)
+  if (R == nullptr)
     {
       ERROR("polynomial ring expected");
-      return NULL;
+      return nullptr;
     }
   p->C = cast_to_CCC(R->getCoefficients());
   // const Ring* K = R->getCoefficients();
@@ -1635,9 +1455,9 @@ PathTracker /* or null */* PathTracker::make(const Matrix* S,
   if (!p->C)
     {
       ERROR("complex coefficients expected");
-      return NULL;
+      return nullptr;
     }
-  p->productST = mpfr_get_d(productST, GMP_RNDN);
+  p->productST = mpfr_get_d(productST, MPFR_RNDN);
   // p->bigT = asin(sqrt(1-p->productST*p->productST));
   // const double pi = 3.141592653589793238462643383279502;
   // if (p->productST < 0)
@@ -1646,17 +1466,17 @@ PathTracker /* or null */* PathTracker::make(const Matrix* S,
 
   int n = S->n_cols() + 1;  // equals the number of variables
   p->maxDegreeTo3halves = 0;
-  p->DMforPN = newarray(double, n);
+  p->DMforPN = newarray_atomic(double, n);
   p->DMforPN[n - 1] = 1;
   p->S = S;
-  p->slpS = NULL;
+  p->slpS = nullptr;
   for (int i = 0; i < n - 1; i++)
     {
       int d = degree_ring_elem(R, S->elem(0, i));
       if (d > p->maxDegreeTo3halves) p->maxDegreeTo3halves = d;
       p->DMforPN[i] = 1 / sqrt(d);
       StraightLineProgram* slp = StraightLineProgram::make(R, S->elem(0, i));
-      if (p->slpS == NULL)
+      if (p->slpS == nullptr)
         p->slpS = slp;
       else
         {
@@ -1670,11 +1490,11 @@ PathTracker /* or null */* PathTracker::make(const Matrix* S,
   p->maxDegreeTo3halves = p->maxDegreeTo3halves * sqrt(p->maxDegreeTo3halves);
 
   p->T = T;
-  p->slpT = NULL;
+  p->slpT = nullptr;
   for (int i = 0; i < T->n_cols(); i++)
     {
       StraightLineProgram* slp = StraightLineProgram::make(R, T->elem(0, i));
-      if (p->slpT == NULL)
+      if (p->slpT == nullptr)
         p->slpT = slp;
       else
         {
@@ -1698,30 +1518,30 @@ PathTracker /* or null */* PathTracker::make(const Matrix* HH)
   if (HH->n_rows() != 1)
     {
       ERROR("1-row matrix expected");
-      return NULL;
+      return nullptr;
     };
 
   PathTracker* p = new PathTracker;
   const PolyRing* R = p->homotopy_R = HH->get_ring()->cast_to_PolyRing();
-  if (R == NULL)
+  if (R == nullptr)
     {
       ERROR("polynomial ring expected");
-      return NULL;
+      return nullptr;
     }
   const Ring* K = R->getCoefficients();
   p->C = cast_to_CCC(K);  // cast to ConcreteRing<ARingCCC> for now
   if (!p->C)
     {
       ERROR("complex coefficients expected");
-      return NULL;
+      return nullptr;
     }
 
   p->H = HH;
-  p->slpH = NULL;
+  p->slpH = nullptr;
   for (int i = 0; i < HH->n_cols(); i++)
     {
       StraightLineProgram* slp = StraightLineProgram::make(R, HH->elem(0, i));
-      if (p->slpH == NULL)
+      if (p->slpH == nullptr)
         p->slpH = slp;
       else
         {
@@ -1740,11 +1560,11 @@ PathTracker /* or null */* PathTracker::make(StraightLineProgram* slp_pred,
                                              StraightLineProgram* slp_corr)
 {
   PathTracker* p = new PathTracker;
-  p->H = NULL;
-  p->slpH = NULL;
+  p->H = nullptr;
+  p->slpH = nullptr;
   p->slpHxt = p->slpHxtH = slp_pred;
   p->slpHxH = slp_corr;
-  p->C = NULL;
+  p->C = nullptr;
   return p;
 }
 
@@ -1817,21 +1637,20 @@ const Matrix /* or null */* rawRefinePT(PathTracker* PT,
   return PT->refine(sols, tolerance, max_corr_steps_refine);
 }
 
-#ifdef SLPdouble
 int PathTracker::track(const Matrix* start_sols)
 {
   double the_smallest_number = 1e-13;
-  double epsilon2 = mpfr_get_d(epsilon, GMP_RNDN);
+  double epsilon2 = mpfr_get_d(epsilon, MPFR_RNDN);
   epsilon2 *= epsilon2;                           // epsilon^2
-  double t_step = mpfr_get_d(init_dt, GMP_RNDN);  // initial step
-  double dt_min_dbl = mpfr_get_d(min_dt, GMP_RNDN);
-  double dt_increase_factor_dbl = mpfr_get_d(dt_increase_factor, GMP_RNDN);
-  double dt_decrease_factor_dbl = mpfr_get_d(dt_decrease_factor, GMP_RNDN);
-  double infinity_threshold2 = mpfr_get_d(infinity_threshold, GMP_RNDN);
+  double t_step = mpfr_get_d(init_dt, MPFR_RNDN);  // initial step
+  double dt_min_dbl = mpfr_get_d(min_dt, MPFR_RNDN);
+  double dt_increase_factor_dbl = mpfr_get_d(dt_increase_factor, MPFR_RNDN);
+  double dt_decrease_factor_dbl = mpfr_get_d(dt_decrease_factor, MPFR_RNDN);
+  double infinity_threshold2 = mpfr_get_d(infinity_threshold, MPFR_RNDN);
   infinity_threshold2 *= infinity_threshold2;
-  double end_zone_factor_dbl = mpfr_get_d(end_zone_factor, GMP_RNDN);
+  double end_zone_factor_dbl = mpfr_get_d(end_zone_factor, MPFR_RNDN);
 
-  if (C == NULL)
+  if (C == nullptr)
     C = cast_to_CCC(
         start_sols->get_ring());  // fixes the problem for PrecookedSLPs
 
@@ -1849,15 +1668,15 @@ int PathTracker::track(const Matrix* start_sols)
         dt_decrease_factor_dbl);
 
   // memory distribution for arrays
-  complex* s_sols = newarray(complex, n * n_sols);
+  complex* s_sols = newarray_atomic(complex, n * n_sols);
   raw_solutions = newarray(Solution, n_sols);
-  complex* x0t0 = newarray(complex, n + 1);
+  complex* x0t0 = newarray_atomic(complex, n + 1);
   complex* x0 = x0t0;
   complex* t0 = x0t0 + n;
-  complex* x1t1 = newarray(complex, n + 1);
+  complex* x1t1 = newarray_atomic(complex, n + 1);
   //  complex* x1 =  x1t1;
   //  complex* t1 = x1t1+n;
-  complex* dxdt = newarray(complex, n + 1);
+  complex* dxdt = newarray_atomic(complex, n + 1);
   complex* dx = dxdt;
   complex* dt = dxdt + n;
   complex* Hxt = newarray_atomic(complex, (n + 1) * n);
@@ -1901,7 +1720,7 @@ int PathTracker::track(const Matrix* start_sols)
               !end_zone)
             {
               end_zone = true;
-              // to do: see if this path coinsides with any other path on entry
+              // to do: see if this path coincides with any other path on entry
               // to the end zone
             }
           if (end_zone)
@@ -2139,419 +1958,46 @@ int PathTracker::track(const Matrix* start_sols)
   if (M2_numericalAlgebraicGeometryTrace > 0) printf("\n");
 
   // clear arrays
-  // deletearray(t_sols); // do not delete (same as raw_solutions)
-  deletearray(s_sols);
-  deletearray(x0t0);
-  deletearray(x1t1);
-  deletearray(dxdt);
-  deletearray(xt);
-  deletearray(dx1);
-  deletearray(dx2);
-  deletearray(dx3);
-  deletearray(dx4);
-  deletearray(Hxt);
-  deletearray(HxtH);
-  deletearray(HxH);
+  // freemem(t_sols); // do not delete (same as raw_solutions)
+  freemem(s_sols);
+  freemem(x0t0);
+  freemem(x1t1);
+  freemem(dxdt);
+  freemem(xt);
+  freemem(dx1);
+  freemem(dx2);
+  freemem(dx3);
+  freemem(dx4);
+  freemem(Hxt);
+  freemem(HxtH);
+  freemem(HxH);
 
   return n_sols;
 }
-#endif
-
-#ifdef SLPmpfr
-int PathTracker::track(const Matrix* start_sols)
-{
-  n_sols = start_sols->n_rows();
-  int n = n_coords = start_sols->n_cols();
-
-  double the_smallest_number = 1e-13;
-  double epsilon2 = mpfr_get_d(epsilon, GMP_RNDN);
-  epsilon2 *= epsilon2;                           // epsilon^2
-  double t_step = mpfr_get_d(init_dt, GMP_RNDN);  // initial step
-  double dt_min_dbl = mpfr_get_d(min_dt, GMP_RNDN);
-  double dt_increase_factor_dbl = mpfr_get_d(dt_increase_factor, GMP_RNDN);
-  double dt_decrease_factor_dbl = mpfr_get_d(dt_decrease_factor, GMP_RNDN);
-  double infinity_threshold2 = mpfr_get_d(infinity_threshold, GMP_RNDN);
-  infinity_threshold2 *= infinity_threshold2;
-  double end_zone_factor_dbl = mpfr_get_d(end_zone_factor, GMP_RNDN);
-  //   gmp_RR the_smallest_number;
-  //   mpfr_init_set_d(the_smallest_number,1e-13,GMP_RNDN);
-  //   gmp_RR epsilon2; mpfr_init(epsilon2);
-  //   mpfr_mul(epsilon2,epsilon,epsilon,GMP_RNDN); //epsilon^2
-  //   gmp_RR t_step = init_dt; // initial step
-  //   gmp_RR dt_min_dbl = min_dt;
-  //   gmp_RR dt_increase_factor_dbl = dt_increase_factor;
-  //   gmp_RR dt_decrease_factor_dbl = dt_decrease_factor;
-  //   gmp_RR infinity_threshold2; mpfr_init(infinity_threshold2);
-  //   mpfr_mul(infinity_threshold2,infinity_threshold,infinity_threshold,GMP_RNDN);
-  //   gmp_RR end_zone_factor_dbl = end_zone_factor;
-
-  // if (M2_numericalAlgebraicGeometryTrace>1) printf("epsilon2 = %e, t_step =
-  // %lf, dt_min_dbl = %lf, dt_increase_factor_dbl = %lf, dt_decrease_factor_dbl
-  // = %lf\n",
-  //            epsilon2, t_step, dt_min_dbl, dt_increase_factor_dbl,
-  //            dt_decrease_factor_dbl);
-
-  // memory distribution for arrays
-  complexAP s_sols[n * n_sols];
-  // complexAP* s_sols = newarray(complexAP,n*n_sols);
-  raw_solutions = newarray(Solution, n_sols);
-  complexAP x0t0[n + 1];
-  // complexAP* x0t0 = newarray(complexAP,n+1);
-  complexAP* x0 = x0t0;
-  complexAP* t0 = x0t0 + n;
-  complexAP x1t1[n + 1];
-  // complexAP* x1t1 = newarray(complexAP,n+1);
-  //  complexAP* x1 =  x1t1;
-  //  complexAP* t1 = x1t1+n;
-  complexAP dxdt[n + 1];
-  // complexAP* dxdt = newarray(complexAP,n+1);
-  complexAP* dx = dxdt;
-  complexAP* dt = dxdt + n;
-  complexAP Hxt[(n + 1) * n];
-  // complexAP* Hxt = newarray_atomic(complexAP, (n+1)*n);
-  complexAP HxtH[(n + 2) * n];
-  // complexAP* HxtH = newarray_atomic(complexAP, (n+2)*n);
-  complexAP HxH[(n + 1) * n];
-  // complexAP* HxH = newarray_atomic(complexAP, (n+1)*n);
-  complexAP *LHS, *RHS;
-  complexAP one_half(0.5, 0);
-  complexAP xt[n + 1];
-  // complexAP* xt = newarray_atomic(complexAP,n+1);
-  complexAP x1[n + 1];
-  // complexAP* dx1 = newarray_atomic(complexAP,n);
-  complexAP x2[n + 1];
-  //  complexAP* dx2 = newarray_atomic(complexAP,n);
-  complexAP x3[n + 1];
-  //  complexAP* dx3 = newarray_atomic(complexAP,n);
-  complexAP x4[n + 1];
-  //  complexAP* dx4 = newarray_atomic(complexAP,n);
-
-  // read solutions: rows are solutions
-  int i, j;
-  complexAP* c = s_sols;
-  for (i = 0; i < n_sols; i++)
-    for (j = 0; j < n; j++, c++)
-      *c = complexAP(toBigComplex(C, start_sols->elem(i, j)));
-
-  Solution* t_s = raw_solutions;  // current target solution
-  complexAP* s_s = s_sols;        // current start solution
-
-  for (int sol_n = 0; sol_n < n_sols; sol_n++, s_s += n, t_s++)
-    {
-      t_s->make(n, s_s);  // cook a Solution
-      t_s->status = PROCESSING;
-      bool end_zone = false;
-      double tol2 =
-          epsilon2;  // current tolerance squared, will change in end zone
-      copy_complex_array<ComplexFieldArbitraryPrecision>(n, s_s, x0);
-      *t0 = complexAP(0, 0);
-
-      *dt = complexAP(t_step);
-      int predictor_successes = 0;
-      int count = 0;  // number of steps
-      while (t_s->status == PROCESSING &&
-             1 - t0->getreal() > the_smallest_number)
-        {
-          if (1 - t0->getreal() <= end_zone_factor_dbl + the_smallest_number &&
-              !end_zone)
-            {
-              end_zone = true;
-              // to do: see if this path coinsides with any other path on entry
-              // to the end zone
-            }
-          if (end_zone)
-            {
-              if (dt->getreal() > 1 - t0->getreal())
-                *dt = complex(1 - t0->getreal());
-            }
-          else
-            {
-              if (dt->getreal() > 1 - end_zone_factor_dbl - t0->getreal())
-                *dt = complex(1 - end_zone_factor_dbl - t0->getreal());
-            }
-
-          bool LAPACK_success = false;
-
-          if (is_projective)  // normalize
-            multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(
-                n,
-                x0,
-                1 / sqrt(norm2_complex_array<ComplexFieldArbitraryPrecision>(
-                        n, x0)));
-
-          printf("t0 = ");
-          t0->print();
-          printf("\n");
-
-          // PREDICTOR in: x0t0,dt,pred_type
-          //           out: dx
-          switch (pred_type)
-            {
-              case TANGENT:
-                {
-                  slpHxt->evaluate(n + 1, x0t0, Hxt);
-                  // evaluate_slpHxt(n,x0t0, Hxt);
-                  LHS = Hxt;
-                  RHS = Hxt + n * n;
-                  multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(
-                      n, RHS, -*dt);
-                  LAPACK_success =
-                      solve_via_mpack_without_transposition(n, LHS, 1, RHS, dx);
-                }
-                break;
-              //       case EULER: {
-              //      evaluate_slpHxtH(n,x0t0,HxtH); // for Euler "H" is
-              //      attached
-              //         LHS = HxtH;
-              //         RHS = HxtH+n*(n+1); // H
-              //      complexAP* Ht = RHS-n;
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,Ht,*dt);
-              //      add_to_complex_array<ComplexFieldArbitraryPrecision>(n,RHS,Ht);
-              //      negate_complex_array<ComplexFieldArbitraryPrecision>(n,RHS);
-              //      LAPACK_success =
-              //      solve_via_lapack_without_transposition(n,LHS,1,RHS,dx);
-              //       } break;
-              //       case RUNGE_KUTTA: {
-              //      copy_complex_array<ComplexFieldArbitraryPrecision>(n+1,x0t0,xt);
-
-              //      // dx1
-              //      evaluate_slpHxt(n,xt,Hxt);
-              //      LHS = Hxt;
-              //      RHS = Hxt+n*n;
-              //      //
-              //      negate_complex_array<ComplexFieldArbitraryPrecision>(n,RHS);
-              //      solve_via_lapack_without_transposition(n,LHS,1,RHS,dx1);
-
-              //      // dx2
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,dx1,one_half*(*dt));
-              //      add_to_complex_array<ComplexFieldArbitraryPrecision>(n,xt,dx1);
-              //      // x0+.5dx1*dt
-              //      xt[n] += one_half*(*dt); // t0+.5dt
-              //      //
-              //      evaluate_slpHxt(n,xt,Hxt);
-              //      LHS = Hxt;
-              //      RHS = Hxt+n*n;
-              //      //
-              //      negate_complex_array<ComplexFieldArbitraryPrecision>(n,RHS);
-              //      LAPACK_success =
-              //      solve_via_lapack_without_transposition(n,LHS,1,RHS,dx2);
-
-              //      // dx3
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,dx2,one_half*(*dt));
-              //      copy_complex_array<ComplexFieldArbitraryPrecision>(n,x0t0,xt);
-              //      // spare t
-              //      add_to_complex_array<ComplexFieldArbitraryPrecision>(n,xt,dx2);
-              //      // x0+.5dx2*dt
-              //      // xt[n] += one_half*(*dt); // t0+.5dt (SAME)
-              //      //
-              //      evaluate_slpHxt(n,xt,Hxt);
-              //      LHS = Hxt;
-              //      RHS = Hxt+n*n;
-              //      //
-              //      negate_complex_array<ComplexFieldArbitraryPrecision>(n,RHS);
-              //      LAPACK_success = LAPACK_success &&
-              //      solve_via_lapack_without_transposition(n,LHS,1,RHS,dx3);
-
-              //      // dx4
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,dx3,*dt);
-              //      copy_complex_array<ComplexFieldArbitraryPrecision>(n+1,x0t0,xt);
-              //      add_to_complex_array<ComplexFieldArbitraryPrecision>(n,xt,dx3);
-              //      // x0+dx3*dt
-              //      xt[n] += *dt; // t0+dt
-              //      //
-              //      evaluate_slpHxt(n,xt,Hxt);
-              //      LHS = Hxt;
-              //      RHS = Hxt+n*n;
-              //      //
-              //      negate_complex_array<ComplexFieldArbitraryPrecision>(n,RHS);
-              //      LAPACK_success = LAPACK_success &&
-              //      solve_via_lapack_without_transposition(n,LHS,1,RHS,dx4);
-
-              //      // "dx1" = .5*dx1*dt, "dx2" = .5*dx2*dt, "dx3" = dx3*dt
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,dx4,*dt);
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,dx1,2);
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,dx2,4);
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,dx3,2);
-              //      add_to_complex_array<ComplexFieldArbitraryPrecision>(n,dx4,dx1);
-              //      add_to_complex_array<ComplexFieldArbitraryPrecision>(n,dx4,dx2);
-              //      add_to_complex_array<ComplexFieldArbitraryPrecision>(n,dx4,dx3);
-              //      multiply_complex_array_scalar<ComplexFieldArbitraryPrecision>(n,dx4,1.0/6);
-              //      copy_complex_array<ComplexFieldArbitraryPrecision>(n,dx4,dx);
-              //       } break;
-              //       case PROJECTIVE_NEWTON: {
-              //      evaluate_slpHxt(n,x0t0, Hxt);
-              //      LHS = Hxt;
-              //      RHS = Hxt+n*n;
-              //         LAPACK_success =
-              //         solve_via_lapack_without_transposition(n,LHS,1,RHS,dx);
-              //         // dx used as temp
-              //      double chi2 =
-              //      sqrt(norm2_complex_array<ComplexFieldArbitraryPrecision>(n,RHS)
-              //      +
-              //      norm2_complex_array<ComplexFieldArbitraryPrecision>(n,dx));
-              //      double chi1;
-
-              //      // evaluate again: LHS destroyed by solve_... !!!
-              //      evaluate_slpHxt(n,x0t0, Hxt);
-              //      LHS = Hxt;
-
-              //      for (j=0; j<n; j++)
-              //        for(i=0; i<n; i++)
-              //          *(LHS+n*i+j) = *(LHS+n*i+j) * DMforPN[j]; // multiply
-              //          j-th column by sqrt(degree)
-              //      //print_complex_matrix(n,(double*)LHS); //!!!
-              //      norm_of_inverse_via_svd(n, LHS, chi1);
-              //      //printf("chi1=%lf\n", chi1);
-              //      *dt = 0.04804448/(maxDegreeTo3halves*chi1*chi2*bigT);
-              //      if (dt->getreal() < dt_min_dbl)
-              //        t_s->status = MIN_STEP_FAILED;
-              //      if ( dt->getreal() > 1 - t0->getreal() )
-              //        *dt = complex(1-t0->getreal());
-              //      zero_complex_array<ComplexFieldArbitraryPrecision>(n,dx);
-              //       } break;
-              default:
-                ERROR("unknown predictor");
-            };
-
-          printf("dx = ");
-          dx->print();
-          printf("\n");
-          printf("dt = ");
-          dt->print();
-          printf("\n");
-          // make prediction
-          copy_complex_array<ComplexFieldArbitraryPrecision>(n + 1, x0t0, x1t1);
-          add_to_complex_array<ComplexFieldArbitraryPrecision>(
-              n + 1, x1t1, dxdt);
-
-          // CORRECTOR
-          int n_corr_steps = 0;
-          bool is_successful;
-          do
-            {
-              n_corr_steps++;
-              //
-              slpHxH->evaluate(n + 1, x1t1, HxH);
-              // evaluate_slpHxH(n,x1t1,HxH);
-              LHS = HxH;
-              RHS = HxH + n * n;  // i.e., H
-              //
-              negate_complex_array<ComplexFieldArbitraryPrecision>(n, RHS);
-              LAPACK_success =
-                  LAPACK_success &&
-                  solve_via_mpack_without_transposition(n, LHS, 1, RHS, dx);
-              add_to_complex_array<ComplexFieldArbitraryPrecision>(n, x1t1, dx);
-              is_successful =
-                  (pred_type == PROJECTIVE_NEWTON) ||
-                  (norm2_complex_array<ComplexFieldArbitraryPrecision>(n, dx) <
-                   tol2 * norm2_complex_array<ComplexFieldArbitraryPrecision>(
-                              n, x1t1));
-              printf(
-                  "c: |dx|^2 = %lf\n",
-                  norm2_complex_array<ComplexFieldArbitraryPrecision>(n, dx));
-            }
-          while (!is_successful and n_corr_steps < max_corr_steps);
-
-          if (!is_successful)
-            {
-              // predictor failure
-              predictor_successes = 0;
-              *dt = complexAP(dt_decrease_factor_dbl) * (*dt);
-              if (dt->getreal() < dt_min_dbl) t_s->status = MIN_STEP_FAILED;
-            }
-          else
-            {
-              // predictor success
-              predictor_successes = predictor_successes + 1;
-              copy_complex_array<ComplexFieldArbitraryPrecision>(
-                  n + 1, x1t1, x0t0);
-              count++;
-              if (is_successful &&
-                  predictor_successes >= num_successes_before_increase)
-                {
-                  predictor_successes = 0;
-                  *dt = complexAP(dt_increase_factor_dbl) * (*dt);
-                }
-            }
-          if (norm2_complex_array<ComplexFieldArbitraryPrecision>(n, x0) >
-              infinity_threshold2)
-            t_s->status = INFINITY_FAILED;
-          if (!LAPACK_success) t_s->status = SINGULAR;
-        }
-      // record the solution
-      // copy_complex_array<ComplexFieldArbitraryPrecision>(n, x0, t_s->x);
-      for (int i = 0; i < n; i++) t_s->x[i] = x0[i].to_complex();
-      t_s->t = t0->getreal();
-      if (t_s->status == PROCESSING) t_s->status = REGULAR;
-      // evaluate_slpHxH(n,x0t0,HxH);
-      // cond_number_via_svd(n, HxH/*Hx*/, t_s->cond);
-      t_s->num_steps = count;
-      if (M2_numericalAlgebraicGeometryTrace > 0)
-        {
-          if (sol_n % 50 == 0) printf("\n");
-          switch (t_s->status)
-            {
-              case REGULAR:
-                printf(".");
-                break;
-              case INFINITY_FAILED:
-                printf("I");
-                break;
-              case MIN_STEP_FAILED:
-                printf("M");
-                break;
-              case SINGULAR:
-                printf("S");
-                break;
-              default:
-                printf("-");
-            }
-          fflush(stdout);
-        }
-    }
-  if (M2_numericalAlgebraicGeometryTrace > 0) printf("\n");
-
-  // clear arrays
-  //   deletearray(s_sols);
-  //   deletearray(x0t0);
-  //   deletearray(x1t1);
-  //   deletearray(dxdt);
-  //   deletearray(xt);
-  //   deletearray(dx1);
-  //   deletearray(dx2);
-  //   deletearray(dx3);
-  //   deletearray(dx4);
-  //   deletearray(Hxt);
-  //   deletearray(HxtH);
-  //   deletearray(HxH);
-
-  return n_sols;
-}
-#endif
 
 Matrix /* or null */* PathTracker::refine(const Matrix* sols,
                                           gmp_RR tolerance,
                                           int max_corr_steps_refine)
 {
-  double epsilon2 = mpfr_get_d(tolerance, GMP_RNDN);
+  double epsilon2 = mpfr_get_d(tolerance, MPFR_RNDN);
   epsilon2 *= epsilon2;
   int n = n_coords;
   if (!cast_to_CCC(sols->get_ring()))
     {
       ERROR("complex coordinates expected");
-      return NULL;
+      return nullptr;
     }
   if (sols->n_cols() != n)
     {
       ERROR("incorrect number of coordinates");
-      return NULL;
+      return nullptr;
     }
   n_sols = sols->n_rows();
 
   // memory distribution for arrays
-  complex* s_sols = newarray(complex, n * n_sols);
-  complex* dx = newarray(complex, n);
-  complex* x1t1 = newarray(complex, n + 1);
+  complex* s_sols = newarray_atomic(complex, n * n_sols);
+  complex* dx = newarray_atomic(complex, n);
+  complex* x1t1 = newarray_atomic(complex, n + 1);
   complex* x1 = x1t1;
   complex* t1 = x1t1 + n;
   complex* HxH = newarray_atomic(complex, n * (n + 1));
@@ -2606,8 +2052,8 @@ Matrix /* or null */* PathTracker::refine(const Matrix* sols,
   for (i = 0; i < n_sols; i++)
     for (j = 0; j < n; j++, c++)
       {
-        // mpfr_set_d(re, c->getreal(), GMP_RNDN);
-        // mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
+        // mpfr_set_d(re, c->getreal(), MPFR_RNDN);
+        // mpfr_set_d(im, c->getimaginary(), MPFR_RNDN);
         // ring_elem e = from_BigReals(C,re,im);
         ring_elem e = from_doubles(C, c->getreal(), c->getimaginary());
 
@@ -2617,17 +2063,17 @@ Matrix /* or null */* PathTracker::refine(const Matrix* sols,
   mpfr_clear(im);
 
   // clear arrays
-  deletearray(s_sols);
-  deletearray(dx);
-  deletearray(x1t1);
-  deletearray(HxH);
+  freemem(s_sols);
+  freemem(dx);
+  freemem(x1t1);
+  freemem(HxH);
 
   return mat.to_matrix();
 }
 
 Matrix /* or null */* PathTracker::getSolution(int solN)
 {
-  if (solN < 0 || solN >= n_sols) return NULL;
+  if (solN < 0 || solN >= n_sols) return nullptr;
   // construct output
   FreeModule* SS = C->make_FreeModule(n_coords);
   FreeModule* TT = C->make_FreeModule(1);
@@ -2639,8 +2085,8 @@ Matrix /* or null */* PathTracker::getSolution(int solN)
   complex* c = s->x;
   for (int j = 0; j < n_coords; j++, c++)
     {
-      // mpfr_set_d(re, c->getreal(), GMP_RNDN);
-      // mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
+      // mpfr_set_d(re, c->getreal(), MPFR_RNDN);
+      // mpfr_set_d(im, c->getimaginary(), MPFR_RNDN);
       // ring_elem e = from_BigReals(C,re,im);
       ring_elem e = from_doubles(C, c->getreal(), c->getimaginary());
 
@@ -2666,8 +2112,8 @@ Matrix /* or null */* PathTracker::getAllSolutions()
       complex* c = s->x;
       for (int j = 0; j < n_coords; j++, c++)
         {
-          // mpfr_set_d(re, c->getreal(), GMP_RNDN);
-          // mpfr_set_d(im, c->getimaginary(), GMP_RNDN);
+          // mpfr_set_d(re, c->getreal(), MPFR_RNDN);
+          // mpfr_set_d(im, c->getimaginary(), MPFR_RNDN);
           // ring_elem e = from_BigReals(C,re,im);
           ring_elem e = from_doubles(C, c->getreal(), c->getimaginary());
 
@@ -2693,20 +2139,20 @@ int PathTracker::getSolutionSteps(int solN)
 
 gmp_RRorNull PathTracker::getSolutionLastT(int solN)
 {
-  if (solN < 0 || solN >= n_sols) return NULL;
-  gmp_RR result = getmemstructtype(gmp_RR);
+  if (solN < 0 || solN >= n_sols) return nullptr;
+  gmp_RRmutable result = getmemstructtype(gmp_RRmutable);
   mpfr_init2(result, C->get_precision());
-  mpfr_set_d(result, raw_solutions[solN].t, GMP_RNDN);
-  return result;
+  mpfr_set_d(result, raw_solutions[solN].t, MPFR_RNDN);
+  return moveTo_gmpRR(result);
 }
 
 gmp_RRorNull PathTracker::getSolutionRcond(int solN)
 {
-  if (solN < 0 || solN >= n_sols) return NULL;
-  gmp_RR result = getmemstructtype(gmp_RR);
+  if (solN < 0 || solN >= n_sols) return nullptr;
+  gmp_RRmutable result = getmemstructtype(gmp_RRmutable);
   mpfr_init2(result, C->get_precision());
-  mpfr_set_d(result, raw_solutions[solN].cond, GMP_RNDN);
-  return result;
+  mpfr_set_d(result, raw_solutions[solN].cond, MPFR_RNDN);
+  return moveTo_gmpRR(result);
 }
 
 void PathTracker::text_out(buffer& o) const
@@ -2742,25 +2188,18 @@ void PathTracker::text_out(buffer& o) const
 void Solution::make(int m, const complex* s_s)
 {
   this->n = m;
-  x = newarray(complex, m);
-  start_x = newarray(complex, m);
+  x = newarray_atomic(complex, m);
+  start_x = newarray_atomic(complex, m);
   copy_complex_array<ComplexField>(m, s_s, start_x);
-}
-
-void Solution::make(int m, const complexAP* s_s)
-{
-  this->n = m;
-  x = newarray(complex, m);
-  start_x = newarray(complex, m);
-  for (int i = 0; i < n; i++) start_x[i] = s_s[i].to_complex();
 }
 
 int degree_ring_elem(const PolyRing* R, ring_elem re)
 {
-  RingElement* RE = RingElement::make_raw(R, re);
-  M2_arrayint d_array = RE->multi_degree();
-  delete RE;
-  return d_array->array[0];
+  auto d = ALLOCATE_EXPONENTS(EXPONENT_BYTE_SIZE(1));
+  R->multi_degree(re, d);
+  // for a single graded ring, the first entry in a monomial array
+  // is the negative of the degree, which is the second entry
+  return -d[0];
 }
 
 void print_complex_matrix(int size, const double* A)

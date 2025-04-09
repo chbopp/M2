@@ -2,6 +2,7 @@
 
 use evaluate;
 use actors;
+use ballarith;
 
 isOption(e:Expr):bool := (
      when e
@@ -34,6 +35,7 @@ override(h:HashTable,v:Sequence,numopts:int):Expr := (
 	       when r is Error do return r else nothing;
 	       )
 	  is y:HashTable do (
+	       -- assume y is not Mutable so we don't lock it
 	       foreach bucket in y.table do (
 		    q := bucket;
 		    while q != q.next do (
@@ -65,6 +67,7 @@ override(v:Sequence,numopts:int):Expr := (
 	       when r is Error do return r else nothing;
 	       )
 	  is y:HashTable do (
+	       -- assume y is not Mutable so we don't lock it
 	       foreach bucket in y.table do (
 		    q := bucket;
 		    while q != q.next do (
@@ -106,6 +109,7 @@ EqualEqualfun(x:Expr,y:Expr):Expr := (
 	  is yy:ZZcell do toExpr(yy.v === xx.v)			    -- # typical value: symbol ==, ZZ, ZZ, Boolean
 	  is yy:QQcell do toExpr(yy.v === xx.v)			    -- # typical value: symbol ==, ZZ, QQ, Boolean
 	  is yy:RRcell do toExpr(yy.v === xx.v)			    -- # typical value: symbol ==, ZZ, RR, Boolean
+      is yy:RRicell do toExpr(yy.v === xx.v)			-- # typical value: symbol ==, ZZ, RRi, Boolean
 	  is yy:CCcell do toExpr(yy.v === xx.v)			    -- # typical value: symbol ==, ZZ, CC, Boolean
 	  else equalmethod(x,y)
 	  )
@@ -118,6 +122,7 @@ EqualEqualfun(x:Expr,y:Expr):Expr := (
 	  is yy:ZZcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, QQ, ZZ, Boolean
 	  is yy:QQcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, QQ, QQ, Boolean
 	  is yy:RRcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, QQ, RR, Boolean
+      is yy:RRicell do toExpr(yy.v === xx.v)			-- # typical value: symbol ==, QQ, RRi, Boolean
 	  is yy:CCcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, QQ, CC, Boolean
 	  else equalmethod(x,y)
 	  )
@@ -126,9 +131,16 @@ EqualEqualfun(x:Expr,y:Expr):Expr := (
 	  is yy:ZZcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, RR, ZZ, Boolean
 	  is yy:QQcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, RR, QQ, Boolean
 	  is yy:RRcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, RR, RR, Boolean
+      is yy:RRicell do toExpr(yy.v === xx.v)			-- # typical value: symbol ==, RR, RRi, Boolean
 	  is yy:CCcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, RR, CC, Boolean
 	  else equalmethod(x,y)
 	  )
+      is xx:RRicell do (
+          when y is yy:RRicell do toExpr(xx.v === yy.v)  -- # typical value: symbol ==, RRi, RRi, Boolean
+                 is yy:ZZcell do toExpr(xx.v === yy.v)   -- # typical value: symbol ==, RRi, ZZ, Boolean
+                 is yy:QQcell do toExpr(xx.v === yy.v)   -- # typical value: symbol ==, RRi, QQ, Boolean
+                 is yy:RRcell do toExpr(xx.v === yy.v)   -- # typical value: symbol ==, RRi, RR, Boolean
+          else buildErrorPacket(EngineError("equality not implemented")))
      is xx:CCcell do (
 	  when y
 	  is yy:ZZcell do toExpr(xx.v === yy.v)			    -- # typical value: symbol ==, CC, ZZ, Boolean
@@ -187,11 +199,6 @@ EqualEqualfun(lhs:Code,rhs:Code):Expr := (
      	  y := eval(rhs);
 	  when y is Error do y else EqualEqualfun(x,y)));
 setup(EqualEqualS,EqualEqualfun);
-not(z:Expr):Expr := (
-     when z is Error do z 
-     else if z == True then False 
-     else if z == False then True
-     else buildErrorPacket("expected true or false"));
 
 NotEqualfun(lhs:Code,rhs:Code):Expr := (
      x := eval(lhs);
@@ -210,7 +217,8 @@ binarycomparison(left:Expr,right:Expr):Expr := (
      else buildErrorPacket("expected result of comparison to be one of the following symbols: <, >, ==, incomparable"));
 
 compare(left:Expr,right:Expr):Expr := (
-     if left == right then EqualEqualE else
+    if left == right then EqualEqualE
+    else
      when left
      is x:ZZcell do (
 	  when right
@@ -222,6 +230,15 @@ compare(left:Expr,right:Expr):Expr := (
 	       r := compare(x.v,y.v);
 	       if flagged() then incomparableE else
 	       if r < 0 then LessE else if r > 0 then GreaterE else EqualEqualE
+	       )
+      is y:RRicell do (
+	       if flagged() then incomparableE else
+	       if (compare(x.v,rightRR(y.v)) == 0) && (compare(x.v,leftRR(y.v)) == 0) then EqualEqualE
+              else if compare(x.v,leftRR(y.v)) < 0 then LessE
+              else if compare(x.v,rightRR(y.v)) > 0 then GreaterE
+              else if compare(x.v,rightRR(y.v)) >= 0 then GreaterEqualE
+              else if compare(x.v,leftRR(y.v)) <= 0 then LessEqualE
+              else incomparableE
 	       )
 	  is y:CCcell do (
 	       r := compare(x.v,y.v);
@@ -274,6 +291,15 @@ compare(left:Expr,right:Expr):Expr := (
 	       if flagged() then incomparableE else
 	       if r < 0 then LessE else if r > 0 then GreaterE else EqualEqualE
 	       )
+      is y:RRicell do (
+	       if flagged() then incomparableE else
+	       if (compare(x.v,rightRR(y.v)) == 0) && (compare(x.v,leftRR(y.v)) == 0) then EqualEqualE
+              else if compare(x.v,leftRR(y.v)) < 0 then LessE
+              else if compare(x.v,rightRR(y.v)) > 0 then GreaterE
+              else if compare(x.v,rightRR(y.v)) >= 0 then GreaterEqualE
+              else if compare(x.v,leftRR(y.v)) <= 0 then LessEqualE
+              else incomparableE
+	       )
 	  is y:CCcell do (
 	       r := compare(x.v,y.v);
 	       if flagged() then incomparableE else
@@ -298,6 +324,15 @@ compare(left:Expr,right:Expr):Expr := (
 	       if flagged() then incomparableE else
 	       if r < 0 then LessE else if r > 0 then GreaterE else EqualEqualE
 	       )
+      is y:RRicell do (
+	       if flagged() then incomparableE else
+	       if (compare(x.v,rightRR(y.v)) == 0) && (compare(x.v,leftRR(y.v)) == 0) then EqualEqualE
+              else if compare(x.v,leftRR(y.v)) < 0 then LessE
+              else if compare(x.v,rightRR(y.v)) > 0 then GreaterE
+              else if compare(x.v,rightRR(y.v)) >= 0 then GreaterEqualE
+              else if compare(x.v,leftRR(y.v)) <= 0 then LessEqualE
+              else incomparableE
+	       )
 	  is y:CCcell do (
 	       r := compare(x.v,y.v);
 	       if flagged() then incomparableE else
@@ -305,6 +340,45 @@ compare(left:Expr,right:Expr):Expr := (
 	       )
      	  is Error do right
 	  else binarycomparison(left,right))
+     is x:RRicell do (
+            when right is y:RRicell do (
+                if flagged() then incomparableE
+                else if ((leftRR(x.v) === leftRR(y.v)) && (rightRR(x.v) === rightRR(y.v))) then EqualEqualE
+                else if compare(rightRR(x.v),leftRR(y.v)) < 0  then LessE
+                else if compare(rightRR(x.v),leftRR(y.v)) <= 0 then LessEqualE
+                else if compare(leftRR(x.v),rightRR(y.v)) > 0 then GreaterE
+                else if compare(leftRR(x.v),rightRR(y.v)) >= 0 then GreaterEqualE
+                else incomparableE
+                )
+            is y:RRcell do (
+	            if flagged() then incomparableE else
+	            if (compare(y.v,rightRR(x.v)) == 0) && (compare(y.v,leftRR(x.v)) == 0) then EqualEqualE
+                else if compare(rightRR(x.v),y.v) < 0 then LessE
+                else if compare(leftRR(x.v),y.v) > 0 then GreaterE
+                else if compare(leftRR(x.v),y.v) >= 0 then GreaterEqualE
+                else if compare(rightRR(x.v),y.v) <= 0 then LessEqualE
+                else incomparableE
+	            )
+            is y:QQcell do (
+	            if flagged() then incomparableE else
+	            if (compare(y.v,rightRR(x.v)) == 0) && (compare(y.v,leftRR(x.v)) == 0) then EqualEqualE
+                else if compare(rightRR(x.v),y.v) < 0 then LessE
+                else if compare(leftRR(x.v),y.v) > 0 then GreaterE
+                else if compare(leftRR(x.v),y.v) >= 0 then GreaterEqualE
+                else if compare(rightRR(x.v),y.v) <= 0 then LessEqualE
+                else incomparableE
+	            )
+            is y:ZZcell do (
+	            if flagged() then incomparableE else
+	            if (compare(y.v,rightRR(x.v)) == 0) && (compare(y.v,leftRR(x.v)) == 0) then EqualEqualE
+                else if compare(rightRR(x.v),y.v) < 0 then LessE
+                else if compare(leftRR(x.v),y.v) > 0 then GreaterE
+                else if compare(leftRR(x.v),y.v) >= 0 then GreaterEqualE
+                else if compare(rightRR(x.v),y.v) <= 0 then LessEqualE
+                else incomparableE
+	            )
+            is Error do right
+            else buildErrorPacket(EngineError("comparison not implemented")))
      is x:CCcell do (
 	  when right
 	  is y:ZZcell do (
@@ -379,7 +453,7 @@ compareop(lhs:Code,rhs:Code):Expr := (
 unaryQuestionFun(rhs:Code):Expr := unarymethod(rhs,QuestionS);
 setup(QuestionS,unaryQuestionFun,compareop);
 
-whichway := GreaterS;
+threadLocal whichway := GreaterS;
 threadLocal sortlist := emptySequence;
 subsort(l:int,r:int):Expr := (
      b := r+1-l;
@@ -444,6 +518,7 @@ setupfun("internalrsort",rsortfun);
 
 lessfun1(rhs:Code):Expr := unarymethod(rhs,LessS);
 lessfun2(lhs:Code,rhs:Code):Expr := (
+    -- # typical value: symbol <, Thing, Thing, Boolean
      e := compareop(lhs,rhs);
      when e 
      is Error do e
@@ -453,15 +528,24 @@ setup(LessS,lessfun1,lessfun2);
 
 greaterequalfun1(rhs:Code):Expr := unarymethod(rhs,GreaterEqualS);
 greaterequalfun2(lhs:Code,rhs:Code):Expr := (
+    -- # typical value: symbol >=, Thing, Thing, Boolean
      e := compareop(lhs,rhs);
      when e 
      is Error do e
-     else if GreaterS.symbol === e || EqualEqualS.symbol === e then True else False
+     else (
+        L := eval(lhs);
+        when L
+           is x:RRicell do (
+                if leftRR(x.v) === rightRR(x.v) then (
+                    if GreaterS.symbol === e || EqualEqualS.symbol === e || GreaterEqualS.symbol === e then True else False)
+                else if GreaterS.symbol === e || GreaterEqualS.symbol === e then True else False)
+           else if GreaterS.symbol === e || EqualEqualS.symbol === e || GreaterEqualS.symbol === e then True else False)
      );
 setup(GreaterEqualS,greaterequalfun1,greaterequalfun2);
 
 greaterfun1(rhs:Code):Expr := unarymethod(rhs,GreaterS);
 greaterfun2(lhs:Code,rhs:Code):Expr := (
+    -- # typical value: symbol >, Thing, Thing, Boolean
      e := compareop(lhs,rhs);
      when e 
      is Error do e
@@ -471,10 +555,18 @@ setup(GreaterS,greaterfun1,greaterfun2);
 
 lessequalfun1(rhs:Code):Expr := unarymethod(rhs,LessEqualS);
 lessequalfun2(lhs:Code,rhs:Code):Expr := (
+    -- # typical value: symbol <=, Thing, Thing, Boolean
      e := compareop(lhs,rhs);
      when e 
      is Error do e
-     else if LessS.symbol === e || EqualEqualS.symbol === e then True else False
+     else (
+        L := eval(lhs);
+        when L
+           is x:RRicell do (
+                if leftRR(x.v) === rightRR(x.v) then (
+                    if LessS.symbol === e || EqualEqualS.symbol === e || LessEqualS.symbol === e then True else False)
+                else if LessS.symbol === e || LessEqualS.symbol === e then True else False)
+           else if LessS.symbol === e || EqualEqualS.symbol === e || LessEqualS.symbol === e then True else False)
      );
 setup(LessEqualS,lessequalfun1,lessequalfun2);
 
@@ -528,7 +620,7 @@ mergepairs(xx:Expr,yy:Expr,f:Expr):Expr := (
 	       else return WrongArg(1,"a list of pairs"));
 	  if n < length(x)+length(y)
 	  then z = new Sequence len n do foreach a in z do provide a;
-	  Expr(sethash(List(commonAncestor(xl.Class,yl.Class), z,0,false),xl.Mutable | yl.Mutable)))
+	  Expr(sethash(List(commonAncestor(xl.Class,yl.Class), z,hash_t(0),false),xl.Mutable | yl.Mutable)))
      else WrongArg(2,"a list")
      else WrongArg(1,"a list"));
 mergepairsfun(e:Expr):Expr := (
@@ -538,6 +630,7 @@ mergepairsfun(e:Expr):Expr := (
      mergepairs(a.0,a.1,a.2)
      else WrongNumArgs(3)
      else WrongNumArgs(3));
+-- # typical value: mergePairs, BasicList, BasicList, Function, BasicList
 setupfun("mergePairs",mergepairsfun);
 
 --rmergepairs(xx:Expr,yy:Expr,f:Expr):Expr := (
@@ -612,9 +705,14 @@ bitxorfun(e:Expr):Expr := (
      else WrongArgZZ(1)
      else WrongNumArgs(2)
      else WrongNumArgs(2));
-setupfun("xor",bitxorfun);
-semicolonfun(lhs:Code,rhs:Code):Expr := when eval(lhs) is err:Error do Expr(err) else eval(rhs);
-setup(SemicolonS,semicolonfun);
+setupfun("bitxorfun",bitxorfun);
+
+bitnotfun(e:Expr):Expr := (
+    when e
+    is x:ZZcell do toExpr(not(x.v))
+    else WrongArgZZ());
+setupfun("bitnotfun", bitnotfun);
+
 starfun(rhs:Code):Expr := unarymethod(rhs,StarS);
 timesfun(lhs:Code,rhs:Code):Expr := (
      l := eval(lhs);
@@ -631,29 +729,26 @@ sin(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(sin(x.v))				    -- # typical value: sin, CC, CC
      is x:RRcell do toExpr(sin(x.v))				    -- # typical value: sin, RR, RR
-     is x:ZZcell do toExpr(sin(toRR(x.v)))			    -- # typical value: sin, ZZ, RR
-     is x:QQcell do toExpr(sin(toRR(x.v)))			    -- # typical value: sin, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(sin(x.v))				    -- # typical value: sin, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("sin",sin);
+setupfun("sin",sin).Protected=false;
 cos(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(cos(x.v))				    -- # typical value: cos, CC, CC
      is x:RRcell do toExpr(cos(x.v))				    -- # typical value: cos, RR, RR
-     is x:ZZcell do toExpr(cos(toRR(x.v)))			    -- # typical value: cos, ZZ, RR
-     is x:QQcell do toExpr(cos(toRR(x.v)))			    -- # typical value: cos, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(cos(x.v))				    -- # typical value: cos, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("cos",cos);
+setupfun("cos",cos).Protected=false;
 tan(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(tan(x.v))				    -- # typical value: tan, CC, CC
      is x:RRcell do toExpr(tan(x.v))				    -- # typical value: tan, RR, RR
-     is x:ZZcell do toExpr(tan(toRR(x.v)))			    -- # typical value: tan, ZZ, RR
-     is x:QQcell do toExpr(tan(toRR(x.v)))			    -- # typical value: tan, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(tan(x.v))				    -- # typical value: tan, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("tan",tan);
+setupfun("tan",tan).Protected=false;
 acos(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(acos(x.v))				    -- # typical value: acos, CC, CC
@@ -662,73 +757,62 @@ acos(e:Expr):Expr := (
 	  then toExpr(acos(toCC(x.v)))
 	  else toExpr(acos(x.v))				    -- # typical value: acos, RR, RR
 	  )
-     is x:QQcell do (
-	  if x.v > 1 || x.v < -1
-	  then toExpr(acos(toCC(x.v)))
-	  else toExpr(acos(toRR(x.v))) -- # typical value: acos, QQ, RR
+     is x:RRicell do (
+	  if x.v <= 1 && x.v >= -1
+	  then toExpr(acos(x.v))                    -- # typical value: acos, RRi, RRi
+      else buildErrorPacket("Must be between -1 and 1")
 	  )
-     is x:ZZcell do (
-	  if x.v > 1 || x.v < -1
-	  then toExpr(acos(toCC(x.v)))
-	  else toExpr(acos(toRR(x.v)))				    -- # typical value: acos, ZZ, RR
-	  )
-     else buildErrorPacket("expected a number")
+     else WrongArgRRorCC()
      );
-setupfun("acos",acos);
+setupfun("acos",acos).Protected=false;
 sec(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(sec(x.v))				    -- # typical value: sec, CC, CC
      is x:RRcell do toExpr(sec(x.v))				    -- # typical value: sec, RR, RR
-     is x:ZZcell do toExpr(sec(toRR(x.v)))			    -- # typical value: sec, ZZ, RR
-     is x:QQcell do toExpr(sec(toRR(x.v)))			    -- # typical value: sec, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(sec(x.v))				    -- # typical value: sec, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("sec",sec);
+setupfun("sec",sec).Protected=false;
 csc(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(csc(x.v))				    -- # typical value: csc, CC, CC
      is x:RRcell do toExpr(csc(x.v))				    -- # typical value: csc, RR, RR
-     is x:ZZcell do toExpr(csc(toRR(x.v)))			    -- # typical value: csc, ZZ, RR
-     is x:QQcell do toExpr(csc(toRR(x.v)))			    -- # typical value: csc, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(csc(x.v))				    -- # typical value: csc, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("csc",csc);
+setupfun("csc",csc).Protected=false;
 cot(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(cot(x.v))				    -- # typical value: cot, CC, CC
      is x:RRcell do toExpr(cot(x.v))				    -- # typical value: cot, RR, RR
-     is x:ZZcell do toExpr(cot(toRR(x.v)))			    -- # typical value: cot, ZZ, RR
-     is x:QQcell do toExpr(cot(toRR(x.v)))			    -- # typical value: cot, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(cot(x.v))				    -- # typical value: cot, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("cot",cot);
+setupfun("cot",cot).Protected=false;
 sech(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(sech(x.v))				    -- # typical value: sech, CC, CC
      is x:RRcell do toExpr(sech(x.v))				    -- # typical value: sech, RR, RR
-     is x:ZZcell do toExpr(sech(toRR(x.v)))			    -- # typical value: sech, ZZ, RR
-     is x:QQcell do toExpr(sech(toRR(x.v)))			    -- # typical value: sech, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(sech(x.v))				    -- # typical value: sech, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("sech",sech);
+setupfun("sech",sech).Protected=false;
 csch(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(csch(x.v))				    -- # typical value: csch, CC, CC
      is x:RRcell do toExpr(csch(x.v))				    -- # typical value: csch, RR, RR
-     is x:ZZcell do toExpr(csch(toRR(x.v)))			    -- # typical value: csch, ZZ, RR
-     is x:QQcell do toExpr(csch(toRR(x.v)))			    -- # typical value: csch, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(csch(x.v))				    -- # typical value: csch, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("csch",csch);
+setupfun("csch",csch).Protected=false;
 coth(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(coth(x.v))				    -- # typical value: coth, CC, CC
      is x:RRcell do toExpr(coth(x.v))				    -- # typical value: coth, RR, RR
-     is x:ZZcell do toExpr(coth(toRR(x.v)))			    -- # typical value: coth, ZZ, RR
-     is x:QQcell do toExpr(coth(toRR(x.v)))			    -- # typical value: coth, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(coth(x.v))				    -- # typical value: coth, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("coth",coth);
+setupfun("coth",coth).Protected=false;
 asin(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(asin(x.v))				    -- # typical value: asin, CC, CC
@@ -737,196 +821,367 @@ asin(e:Expr):Expr := (
 	  then toExpr(asin(toCC(x.v)))
 	  else toExpr(asin(x.v))				    -- # typical value: asin, RR, RR
 	  )
-     is x:QQcell do (
-	  if x.v > 1 || x.v < -1
-	  then toExpr(asin(toCC(x.v)))
-	  else toExpr(asin(toRR(x.v)))				    -- # typical value: asin, QQ, RR
+     is x:RRicell do (
+	  if x.v <= 1 && x.v >= -1
+	  then toExpr(asin(x.v))                                    -- # typical value: asin, RRi, RRi
+	  else buildErrorPacket("Must be between -1 and 1")
 	  )
-     is x:ZZcell do (
-	  if x.v > 1 || x.v < -1
-	  then toExpr(asin(toCC(x.v)))
-	  else toExpr(asin(toRR(x.v)))			    -- # typical value: asin, ZZ, RR
-	  )
-     else buildErrorPacket("expected a number")
+     else WrongArgRRorCC()
      );
-setupfun("asin",asin);
+setupfun("asin",asin).Protected=false;
 log1p(e:Expr):Expr := (
      when e
      is x:RRcell do toExpr(log1p(x.v))				    -- # typical value: log1p, RR, RR
-     is x:ZZcell do toExpr(log1p(toRR(x.v)))			    -- # typical value: log1p, ZZ, RR
-     is x:QQcell do toExpr(log1p(toRR(x.v)))			    -- # typical value: log1p, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(log1p(x.v))				    -- # typical value: log1p, RRi, RRi
+     is x:CCcell do toExpr(log(1 + x.v))                            -- # typical value: log1p, CC, CC
+     else WrongArgRRorCC()
      );
-setupfun("log1p",log1p);
+setupfun("log1p",log1p).Protected=false;
 expm1(e:Expr):Expr := (
      when e
      is x:RRcell do toExpr(expm1(x.v))				    -- # typical value: expm1, RR, RR
-     is x:ZZcell do toExpr(expm1(toRR(x.v)))			    -- # typical value: expm1, ZZ, RR
-     is x:QQcell do toExpr(expm1(toRR(x.v)))			    -- # typical value: expm1, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(expm1(x.v))				    -- # typical value: expm1, RRi, RRi
+     is x:CCcell do toExpr(exp(x.v) - 1)                            -- # typical value: expm1, CC, CC
+     else WrongArgRRorCC()
      );
-setupfun("expm1",expm1);
+setupfun("expm1",expm1).Protected=false;
 eint(e:Expr):Expr := (
      when e
      is x:RRcell do toExpr(eint(x.v))				    -- # typical value: eint, RR, RR
-     is x:ZZcell do toExpr(eint(toRR(x.v)))			    -- # typical value: eint, ZZ, RR
-     is x:QQcell do toExpr(eint(toRR(x.v)))			    -- # typical value: eint, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(eint(x.v))				    -- # typical value: eint, RRi, RRi
+     is x:CCcell do toExpr(eint(x.v))				    -- # typical value: eint, CC, CC
+     else WrongArgRRorCC()
      );
-setupfun("eint",eint);
+setupfun("eint",eint).Protected=false;
 Gamma(e:Expr):Expr := (
      when e
      is x:RRcell do toExpr(Gamma(x.v))				    -- # typical value: Gamma, RR, RR
-     is x:ZZcell do toExpr(Gamma(toRR(x.v)))			    -- # typical value: Gamma, ZZ, RR
-     is x:QQcell do toExpr(Gamma(toRR(x.v)))			    -- # typical value: Gamma, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(Gamma(x.v))				    -- # typical value: Gamma, RRi, RRi
+     is x:CCcell do toExpr(Gamma(x.v))				    -- # typical value: Gamma, CC, CC
+     is a:Sequence do
+	 if length(a) != 2 then WrongNumArgs(1,2)
+	 else (
+	     when a.0
+	     is s:RRcell do (
+		 when a.1
+		 is x:RRcell  do toExpr(Gamma(      s.v , x.v))	    -- # typical value: Gamma, RR, RR, RR
+		 is x:RRicell do toExpr(Gamma(toRRi(s.v), x.v))	    -- # typical value: Gamma, RR, RRi, RRi
+		 is x:CCcell  do toExpr(Gamma( toCC(s.v), x.v))	    -- # typical value: Gamma, RR, CC, CC
+		 else WrongArgRRorCC(2))
+	     is s:RRicell do (
+		 when a.1
+		 is x:RRcell  do toExpr(Gamma(s.v, toRRi(x.v)))	    -- # typical value: Gamma, RRi, RR, RRi
+		 is x:RRicell do toExpr(Gamma(s.v,       x.v ))	    -- # typical value: Gamma, RRi, RRi, RRi
+		 else WrongArgRRorRRi(2))
+	     is s:CCcell do (
+		 when a.1
+		 is x:RRcell do toExpr(Gamma(s.v, toCC(x.v)))	    -- # typical value: Gamma, CC, RR, CC
+		 is x:CCcell do toExpr(Gamma(s.v,      x.v))	    -- # typical value: Gamma, CC, CC, CC
+		 else WrongArgRRorCC(2))
+	     else WrongArgRRorCC(2))
+     else WrongArgRRorCC()
      );
-setupfun("Gamma",Gamma);
+setupfun("Gamma",Gamma).Protected=false;
+regularizedGamma(e:Expr):Expr := (
+    when e
+    is a:Sequence do (
+	if length(a) != 2 then WrongNumArgs(2)
+	else (
+	    when a.0
+	    is s:RRcell do (
+		when a.1
+		is x:RRcell do toExpr(
+		    midpointRR(regularizedGamma(toRRi(s.v), toRRi(x.v))))   -- # typical value: regularizedGamma, RR, RR, RR
+		is x:RRicell do toExpr(regularizedGamma(toRRi(s.v), x.v))   -- # typical value: regularizedGamma, RR, RRi, RRi
+		is x:CCcell do toExpr(regularizedGamma(toCC(s.v), x.v))     -- # typical value: regularizedGamma, RR, CC, CC
+		else WrongArgRRorCC(2))
+	    is s:RRicell do (
+		when a.1
+		is x:RRcell do toExpr(regularizedGamma(s.v, toRRi(x.v)))    -- # typical value: regularizedGamma, RRi, RR, RRi
+		is x:RRicell do toExpr(regularizedGamma(s.v, x.v))          -- # typical value: regularizedGamma, RRi, RRi, RRi
+		else WrongArgRRorRRi(2))
+	    is s:CCcell do (
+		when a.1
+		is x:RRcell do toExpr(regularizedGamma(s.v, toCC(x.v)))     -- # typical value: regularizedGamma, CC, RR, CC
+		is x:CCcell do toExpr(regularizedGamma(s.v, x.v))           -- # typical value: regularizedGamma, CC, CC, CC
+		else WrongArgRRorCC(2))
+	    else WrongArgRRorCC(2)))
+    else WrongNumArgs(2));
+setupfun("regularizedGamma",regularizedGamma).Protected=false;
+Digamma(e:Expr):Expr := (
+     when e
+     is x:RRcell do toExpr(Digamma(x.v))			    -- # typical value: Digamma, RR, RR
+     is x:RRicell do toExpr(Digamma(x.v))			    -- # typical value: Digamma, RRi, RRi
+     is x:CCcell do toExpr(Digamma(x.v))			    -- # typical value: Digamma, CC, CC
+     else WrongArgRRorCC()
+     );
+setupfun("Digamma",Digamma).Protected=false;
 export lgamma(x:RR):Expr := (
-     z := newRR(precision(x));
+     z := newRRmutable(precision(x));
      i := 0;
-     Ccode( void, "mpfr_lgamma((__mpfr_struct *)", z, ",&",i,",(__mpfr_struct *)", x, ", GMP_RNDN)" );
-     Expr(Sequence(toExpr(z),toExpr(i))));
+     Ccode( void, "mpfr_lgamma((mpfr_ptr)", z, ",&",i,",(mpfr_srcptr)", x, ", MPFR_RNDN)" );
+     Expr(Sequence(toExpr(moveToRR(z)),toExpr(i))));
 lgamma(e:Expr):Expr := (
      when e
      is x:RRcell do lgamma(x.v)				    -- # typical value: lgamma, RR, RR
-     is x:ZZcell do lgamma(toRR(x.v))			    -- # typical value: lgamma, ZZ, RR
-     is x:QQcell do lgamma(toRR(x.v))			    -- # typical value: lgamma, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(lgamma(x.v))		    -- # typical value: lgamma, RRi, RRi
+     is x:CCcell do toExpr(lgamma(x.v))			    -- # typical value: lgamma, CC, CC
+     else WrongArgRRorCC()
      );
 setupfun("lgamma",lgamma);
 zeta(e:Expr):Expr := (
      when e
      is x:RRcell do toExpr(zeta(x.v))				    -- # typical value: zeta, RR, RR
-     is x:ZZcell do (					    -- # typical value: zeta, ZZ, RR
-	  if isULong(x.v)
-	  then toExpr(zeta(toULong(x.v),defaultPrecision))
-	  else toExpr(zeta(toRR(x.v)))
-	  )
-     is x:QQcell do toExpr(zeta(toRR(x.v)))			    -- # typical value: zeta, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(zeta(x.v))				    -- # typical value: zeta, RRi, RRi
+     is x:CCcell do toExpr(zeta(x.v))                               -- # typical value: zeta, CC, CC
+     else WrongArgRRorCC()
      );
-setupfun("zeta",zeta);
+setupfun("zeta",zeta).Protected=false;
 erf(e:Expr):Expr := (
      when e
      is x:RRcell do toExpr(erf(x.v))				    -- # typical value: erf, RR, RR
-     is x:ZZcell do toExpr(erf(toRR(x.v)))			    -- # typical value: erf, ZZ, RR
-     is x:QQcell do toExpr(erf(toRR(x.v)))			    -- # typical value: erf, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(erf(x.v))				    -- # typical value: erf, RRi, RRi
+     is x:CCcell do toExpr(erf(x.v))				    -- # typical value: erf, CC, CC
+     else WrongArgRRorCC()
      );
-setupfun("erf",erf);
+setupfun("erf",erf).Protected=false;
 erfc(e:Expr):Expr := (
      when e
      is x:RRcell do toExpr(erfc(x.v))				    -- # typical value: erfc, RR, RR
-     is x:ZZcell do toExpr(erfc(toRR(x.v)))			    -- # typical value: erfc, ZZ, RR
-     is x:QQcell do toExpr(erfc(toRR(x.v)))			    -- # typical value: erfc, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(erfc(x.v))				    -- # typical value: erfc, RRi, RRi
+     is x:CCcell do toExpr(erfc(x.v))				    -- # typical value: erfc, CC, CC
+     else WrongArgRRorCC()
      );
-setupfun("erfc",erfc);
+setupfun("erfc",erfc).Protected=false;
+inverseErf(e:Expr):Expr := (
+     when e
+     is x:RRcell do toExpr(midpointRR(inverseErf(toRRi(x.v))))	    -- # typical value: inverseErf, RR, RR
+     is x:RRicell do toExpr(inverseErf(x.v))			    -- # typical value: inverseErf, RRi, RRi
+     else WrongArgRRorRRi());
+setupfun("inverseErf",inverseErf).Protected=false;
 BesselJ(n:long,x:RR):RR := (
      if n == long(0) then j0(x)
      else if n == long(1) then j1(x)
      else jn(n,x));
 BesselJ(e:Expr):Expr := (
      when e is s:Sequence do (
-	  when s.0 is n:ZZcell do if !isLong(n.v) then WrongArg(1,"a small integer") else (
-	       when s.1 
-	       is x:RRcell do toExpr(BesselJ(toLong(n.v),x.v))	    -- # typical value: BesselJ, ZZ, RR, RR
-	       is x:ZZcell do toExpr(BesselJ(toLong(n.v),toRR(x.v)))  -- # typical value: BesselJ, ZZ, ZZ, RR
-	       is x:QQcell do toExpr(BesselJ(toLong(n.v),toRR(x.v)))  -- # typical value: BesselJ, ZZ, QQ, RR
-	       else WrongArg(2,"a number"))
-	  else WrongArgZZ(1))
+	  when s.0
+	  is n:ZZcell do (
+	      if isLong(n.v) then (
+		  when s.1
+		  is x:RRcell do toExpr(BesselJ(toLong(n.v), x.v))
+		  is x:RRicell do toExpr(BesselJ(toRRi(n.v,precision(x.v)),x.v))
+		  is x:CCcell do toExpr(BesselJ(toCC(n.v), x.v))
+		  else WrongArgRRorCC(2))
+	      else (
+		  when s.1
+		  is x:RRcell do toExpr(
+		      midpointRR(BesselJ(toRRi(n.v), toRRi(x.v))))
+		  is x:RRicell do toExpr(BesselJ(toRRi(n.v,precision(x.v)),x.v))
+		  is x:CCcell do toExpr(BesselJ(toCC(n.v), x.v ))
+		  else WrongArgRRorCC(2)))
+	  is n:RRcell do (
+	      when s.1
+	      is x:RRcell do toExpr(
+		  midpointRR(BesselJ(toRRi(n.v), toRRi(x.v))))
+	      is x:RRicell do toExpr(BesselJ(toRRi(n.v), x.v))
+	      is x:CCcell do toExpr(BesselJ(toCC(n.v), x.v ))
+	      else WrongArgRRorCC(2))
+	  is n:RRicell do (
+	      when s.1
+	      is x:RRcell do toExpr(BesselJ(n.v, toRRi(x.v)))
+	      is x:RRicell do toExpr(BesselJ(n.v, x.v))
+	      else WrongArgRRorRRi(2))
+	  is n:CCcell do (
+	      when s.1
+	      is x:RRcell do toExpr(BesselJ(n.v, toCC(x.v)))
+	      is x:CCcell do toExpr(BesselJ(n.v, x.v ))
+	      else WrongArgRRorCC(2))
+	  else WrongArg(1, "an integer, real number or interval, or complex number"))
      else WrongNumArgs(2));
-setupfun("BesselJ",BesselJ);
+setupfun("BesselJ",BesselJ).Protected=false;
 BesselY(n:long,x:RR):RR := (
      if n == long(0) then y0(x)
      else if n == long(1) then y1(x)
      else yn(n,x));
 BesselY(e:Expr):Expr := (
      when e is s:Sequence do (
-	  when s.0 is n:ZZcell do if !isLong(n.v) then WrongArg(1,"a small integer") else (
-	       when s.1 
-	       is x:RRcell do toExpr(BesselY(toLong(n.v),x.v))	    -- # typical value: BesselY, ZZ, RR, RR
-	       is x:ZZcell do toExpr(BesselY(toLong(n.v),toRR(x.v)))  -- # typical value: BesselY, ZZ, ZZ, RR
-	       is x:QQcell do toExpr(BesselY(toLong(n.v),toRR(x.v)))  -- # typical value: BesselY, ZZ, QQ, RR
-	       else WrongArg(2,"a number"))
-	  else WrongArgZZ(1))
+	  when s.0
+	  is n:ZZcell do (
+	      if isLong(n.v) then (
+		  when s.1
+		  is x:RRcell do toExpr(BesselY(toLong(n.v), x.v))
+		  is x:RRicell do toExpr(BesselY(toRRi(n.v,precision(x.v)),x.v))
+		  is x:CCcell do toExpr(BesselY(toCC(n.v), x.v))
+		  else WrongArgRRorCC(2))
+	      else (
+		  when s.1
+		  is x:RRcell do toExpr(
+		      midpointRR(BesselY(toRRi(n.v), toRRi(x.v))))
+		  is x:RRicell do toExpr(BesselY(toRRi(n.v,precision(x.v)),x.v))
+		  is x:CCcell do toExpr(BesselY(toCC(n.v), x.v ))
+		  else WrongArgRRorCC(2)))
+	  is n:RRcell do (
+	      when s.1
+	      is x:RRcell do toExpr(
+		  midpointRR(BesselY(toRRi(n.v), toRRi(x.v))))
+	      is x:RRicell do toExpr(BesselY(toRRi(n.v), x.v))
+	      is x:CCcell do toExpr(BesselY(toCC(n.v), x.v ))
+	      else WrongArgRRorCC(2))
+	  is n:RRicell do (
+	      when s.1
+	      is x:RRcell do toExpr(BesselY(n.v, toRRi(x.v)))
+	      is x:RRicell do toExpr(BesselY(n.v, x.v))
+	      else WrongArgRRorRRi(2))
+	  is n:CCcell do (
+	      when s.1
+	      is x:RRcell do toExpr(BesselY(n.v, toCC(x.v)))
+	      is x:CCcell do toExpr(BesselY(n.v, x.v ))
+	      else WrongArgRRorCC(2))
+	  else WrongArg(1, "an integer, real number or interval, or complex number"))
      else WrongNumArgs(2));
-setupfun("BesselY",BesselY);
+setupfun("BesselY",BesselY).Protected=false;
 atan2(yy:Expr,xx:Expr):Expr := (
      when yy
      is y:RRcell do (
 	  when xx
 	  is x:RRcell do toExpr(atan2(y.v,x.v))			            -- # typical value: atan2, RR, RR, RR
-	  is x:ZZcell do toExpr(atan2(y.v,toRR(x.v,precision(y.v))))	    -- # typical value: atan2, RR, ZZ, RR
-	  is x:QQcell do toExpr(atan2(y.v,toRR(x.v,precision(y.v))))	    -- # typical value: atan2, RR, QQ, RR
-	  else WrongArg(1,"a number"))
-     is y:ZZcell do (
+	  is x:RRicell do toExpr(atan2(toRRi(y.v),x.v))			    -- # typical value: atan2, RR, RRi, RRi
+	  else WrongArgRRorRRi(1))
+     is y:RRicell do (
 	  when xx
-	  is x:RRcell do toExpr(atan2(toRR(y.v,precision(x.v)),x.v))    -- -- # typical value: atan2, ZZ, RR, RR
-	  is x:ZZcell do toExpr(atan2(toRR(y.v),toRR(x.v)))	       -- # typical value: atan2, ZZ, ZZ, RR
-	  is x:QQcell do toExpr(atan2(toRR(y.v),toRR(x.v)))	       -- # typical value: atan2, ZZ, QQ, RR
-	  else WrongArg(1,"a number"))
-     is y:QQcell do (
-	  when xx
-	  is x:RRcell do toExpr(atan2(toRR(y.v,precision(x.v)),x.v))    -- # typical value: atan2, QQ, RR, RR
-	  is x:ZZcell do toExpr(atan2(toRR(y.v),toRR(x.v)))	    -- # typical value: atan2, QQ, ZZ, RR
-	  is x:QQcell do toExpr(atan2(toRR(y.v),toRR(x.v)))	    -- # typical value: atan2, QQ, QQ, RR
-     	  else WrongArg(1,"a number"))
-     else WrongArg(2,"a number")
+	  is x:RRcell do toExpr(atan2(y.v,toRRi(x.v)))			            -- # typical value: atan2, RRi, RR, RRi
+	  is x:RRicell do toExpr(atan2(y.v,x.v))			            -- # typical value: atan2, RRi, RRi, RRi
+	  else WrongArgRRorRRi(1))
+     else WrongArgRRorRRi(2)
      );
 atan(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(atan(x.v))				    -- # typical value: atan, CC, CC
      is x:RRcell do toExpr(atan(x.v))				    -- # typical value: atan, RR, RR
-     is x:ZZcell do toExpr(atan(toRR(x.v)))			    -- # typical value: atan, ZZ, RR
-     is x:QQcell do toExpr(atan(toRR(x.v)))	       -- # typical value: atan, QQ, RR
-     is a:Sequence do if length(a) == 2 then buildErrorPacket("atan(x,y) has been replaced by atan2(y,x)")
-     else WrongNumArgs(1)
-     else buildErrorPacket("expected a number or a pair of numbers")
+     is x:RRicell do toExpr(atan(x.v))				    -- # typical value: atan, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("atan",atan);
+setupfun("atan",atan).Protected=false;
 atan2(e:Expr):Expr := (
      when e is s:Sequence do if length(s) == 2 then atan2(s.0,s.1)
      else WrongNumArgs(2)
      else WrongNumArgs(2));
-setupfun("atan2",atan2);
+setupfun("atan2",atan2).Protected=false;
+
+Beta(yy:Expr,xx:Expr):Expr := (
+     when yy
+     is y:RRcell do (
+	  when xx
+	  is x:RRcell do toExpr(Beta(y.v, x.v))			    -- # typical value: Beta, RR, RR, RR
+	  is x:RRicell do toExpr(Beta(toRRi(y.v), x.v))		    -- # typical value: Beta, RR, RRi, RRi
+	  is x:CCcell do toExpr(Beta(toCC(y.v), x.v))		    -- # typical value: Beta, RR, CC, CC
+	  else WrongArgRRorCC(2))
+     is y:RRicell do (
+	  when xx
+	  is x:RRcell do toExpr(Beta(y.v, toRRi(x.v)))		    -- # typical value: Beta, RRi, RR, RRi
+	  is x:RRicell do toExpr(Beta(y.v, x.v))		    -- # typical value: Beta, RRi, RRi, RRi
+	  else WrongArgRRorRRi(2))
+     is y:CCcell do (
+	  when xx
+	  is x:RRcell do toExpr(Beta(y.v, toCC(x.v)))		    -- # typical value: Beta, CC, RR, CC
+	  is x:CCcell do toExpr(Beta(y.v, x.v))			    -- # typical value: Beta, CC, CC, CC
+	  else WrongArgRRorCC(2))
+     else WrongArgRRorCC(1)
+     );
+Beta(e:Expr):Expr := (
+     when e is s:Sequence do if length(s) == 2 then Beta(s.0,s.1)
+     else WrongNumArgs(2)
+     else WrongNumArgs(2));
+setupfun("Beta",Beta).Protected=false;
+
+regularizedBeta(xx:Expr,yy:Expr,zz:Expr):Expr := (
+    when xx
+    is x:RRcell do (
+	when yy
+	is y:RRcell do (
+	    when zz
+	    is z:RRcell do toExpr(
+		midpointRR(regularizedBeta(toRRi(x.v), toRRi(y.v), toRRi(z.v)))) -- # typical value: regularizedBeta, RR, RR, RR, RR
+	    is z:RRicell do toExpr(regularizedBeta(toRRi(x.v), toRRi(y.v), z.v)) -- # typical value: regularizedBeta, RR, RR, RRi, RRi
+	    is z:CCcell do toExpr(regularizedBeta(toCC(x.v), toCC(y.v), z.v))    -- # typical value: regularizedBeta, RR, RR, CC, CC
+	    else WrongArgRRorCC(3))
+	is y:RRicell do (
+	    when zz
+	    is z:RRcell do toExpr(regularizedBeta(toRRi(x.v), y.v, toRRi(z.v)))  -- # typical value: regularizedBeta, RR, RRi, RR, RRi
+	    is z:RRicell do toExpr(regularizedBeta(toRRi(x.v), y.v, z.v))        -- # typical value: regularizedBeta, RR, RRi, RRi, RRi
+	    else WrongArgRRorRRi(3))
+	is y:CCcell do (
+	    when zz
+	    is z:RRcell do toExpr(regularizedBeta(toCC(x.v), y.v, toCC(z.v)))    -- # typical value: regularizedBeta, RR, CC, RR, CC
+	    is z:CCcell do toExpr(regularizedBeta(toCC(x.v), y.v, z.v))          -- # typical value: regularizedBeta, RR, CC, CC, CC
+	    else WrongArgRRorCC(3))
+	else WrongArgRRorCC(2))
+    is x:RRicell do (
+	when yy
+	is y:RRcell do (
+	    when zz
+	    is z:RRcell do toExpr(regularizedBeta(x.v, toRRi(y.v), toRRi(z.v)))  -- # typical value: regularizedBeta, RRi, RR, RR, RRi
+	    is z:RRicell do toExpr(regularizedBeta(x.v, toRRi(y.v), z.v))        -- # typical value: regularizedBeta, RRi, RR, RRi, RRi
+	    else WrongArgRRorRRi(3))
+	is y:RRicell do (
+	    when zz
+	    is z:RRcell do toExpr(regularizedBeta((x.v), y.v, toRRi(z.v)))       -- # typical value: regularizedBeta, RRi, RRi, RR, RRi
+	    is z:RRicell do toExpr(regularizedBeta(x.v, y.v, z.v))               -- # typical value: regularizedBeta, RRi, RRi, RRi, RRi
+	    else WrongArgRRorRRi(3))
+	else WrongArgRRorRRi(2))
+    is x:CCcell do (
+	when yy
+	is y:RRcell do (
+	    when zz
+	    is z:RRcell do toExpr(regularizedBeta(x.v, toCC(y.v), toCC(z.v)))    -- # typical value: regularizedBeta, CC, RR, RR, CC
+	    is z:CCcell do toExpr(regularizedBeta(x.v, toCC(y.v), z.v))          -- # typical value: regularizedBeta, CC, RR, CC, CC
+	    else WrongArgRRorCC(3))
+	is y:CCcell do (
+	    when zz
+	    is z:RRcell do toExpr(regularizedBeta(x.v, y.v, toCC(z.v)))          -- # typical value: regularizedBeta, CC, CC, RR, CC
+	    is z:CCcell do toExpr(regularizedBeta(x.v, y.v, z.v))                -- # typical value: regularizedBeta, CC, CC, CC, CC
+	    else WrongArgRRorCC(3))
+	else WrongArgRRorCC(2))
+    else WrongArgRRorCC(1));
+regularizedBeta(e:Expr):Expr := (
+     when e is s:Sequence do if length(s) == 3 then regularizedBeta(s.0,s.1,s.2)
+     else WrongNumArgs(3)
+     else WrongNumArgs(3));
+setupfun("regularizedBeta",regularizedBeta).Protected=false;
+
 cosh(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(cosh(x.v))				    -- # typical value: cosh, CC, CC
      is x:RRcell do toExpr(cosh(x.v))				    -- # typical value: cosh, RR, RR
-     is x:ZZcell do toExpr(cosh(toRR(x.v)))			    -- # typical value: cosh, ZZ, RR
-     is x:QQcell do toExpr(cosh(toRR(x.v)))			    -- # typical value: cosh, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(cosh(x.v))				    -- # typical value: cosh, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("cosh",cosh);
+setupfun("cosh",cosh).Protected=false;
 sinh(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(sinh(x.v))				    -- # typical value: sinh, CC, CC
      is x:RRcell do toExpr(sinh(x.v))				    -- # typical value: sinh, RR, RR
-     is x:ZZcell do toExpr(sinh(toRR(x.v)))			    -- # typical value: sinh, ZZ, RR
-     is x:QQcell do toExpr(sinh(toRR(x.v)))			    -- # typical value: sinh, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(sinh(x.v))				    -- # typical value: sinh, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("sinh",sinh);
+setupfun("sinh",sinh).Protected=false;
 tanh(e:Expr):Expr := (
      when e
      is x:CCcell do toExpr(tanh(x.v))				    -- # typical value: tanh, CC, CC
      is x:RRcell do toExpr(tanh(x.v))				    -- # typical value: tanh, RR, RR
-     is x:ZZcell do toExpr(tanh(toRR(x.v)))			    -- # typical value: tanh, ZZ, RR
-     is x:QQcell do toExpr(tanh(toRR(x.v)))			    -- # typical value: tanh, QQ, RR
-     else buildErrorPacket("expected a number")
+     is x:RRicell do toExpr(tanh(x.v))				    -- # typical value: tanh, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("tanh",tanh);
+setupfun("tanh",tanh).Protected=false;
 exp(e:Expr):Expr := (
      when e
-     is x:CCcell do toExpr(exp(x.v))
-     is x:RRcell do toExpr(exp(x.v))
-     is x:ZZcell do toExpr(exp(toRR(x.v)))
-     is x:QQcell do toExpr(exp(toRR(x.v)))
-     else buildErrorPacket("expected a number")
+     is x:CCcell do toExpr(exp(x.v))			    -- # typical value: exp, CC, CC
+     is x:RRcell do toExpr(exp(x.v))			    -- # typical value: exp, RR, RR
+     is x:RRicell do toExpr(exp(x.v))			    -- # typical value: exp, RRi, RRi
+     else WrongArgRRorCC()
      );
-setupfun("exp'",exp);
+setupfun("exp",exp).Protected=false;
 log(e:Expr):Expr := (
      when e
      is a:Sequence do if length(a) != 2 then WrongNumArgs(1,2) 
@@ -938,53 +1193,33 @@ log(e:Expr):Expr := (
 	       is x:RRcell do (			            -- # typical value: log, RR, RR, CC
      	       	    if b.v>0 && x.v>0 then toExpr(log(b.v,x.v)) else toExpr(logc(b.v,x.v))
 		    )
-	       is x:ZZcell do (	    -- # typical value: log, RR, ZZ, RR
-		    y := toRR(x.v,precision(b.v));
-		    if b.v < 0 || y < 0 then toExpr(logc(b.v,y)) else toExpr(log(b.v,y)))
-	       is x:QQcell do (	    -- # typical value: log, RR, QQ, RR
-		    y := toRR(x.v,precision(b.v));
-		    if b.v < 0 || y < 0 then toExpr(logc(b.v,y)) else toExpr(log(b.v,y)))
-	       else WrongArg(1,"a number"))
-	  is b:ZZcell do (
+	       is x:RRicell do (                     -- # typical value: log, RR, RRi, RRi
+     	       	    if b.v>0 && x.v>=0 then toExpr(log(toRRi(b.v,precision(b.v)),x.v))
+                    else
+                        buildErrorPacket("Not defined")
+		    )
+	       else WrongArgRRorCC(1))
+    is b:RRicell do (
 	       when a.1
-	       is x:CCcell do ( -- # typical value: log, ZZ, CC, CC
-		    toExpr(log(toRR(b.v,precision(x.v)),x.v))
+                is x:RRcell do (    -- # typical value: log, RRi, RR, RRi
+     	       	    if b.v>0 && x.v>=0 then toExpr(log(b.v,toRRi(x.v,precision(x.v))))
+                                else
+                        buildErrorPacket("Not defined")
+		         )
+	       is x:RRicell do (        -- # typical value: log, RRi, RRi, RRi
+     	       	    if b.v>0 && x.v>=0 then toExpr(log(b.v,x.v))
+                    else
+                        buildErrorPacket("Not defined")
 		    )
-	       is x:RRcell do (    -- -- # typical value: log, ZZ, RR, RR
-		    c := toRR(b.v,precision(x.v));
-		    if c>0 && x.v>0 then toExpr(log(c,x.v)) else toExpr(logc(c,x.v))		    
-		    )
-	       is x:ZZcell do (	       -- # typical value: log, ZZ, ZZ, RR
-		    if b.v>0 && x.v>0 then toExpr(log(toRR(b.v),toRR(x.v))) else toExpr(logc(toRR(b.v),toRR(x.v)))
-		    )
-	       is x:QQcell do (	       -- # typical value: log, ZZ, QQ, RR
-		    if b.v>0 && x.v>0 then toExpr(log(toRR(b.v),toRR(x.v))) else toExpr(logc(toRR(b.v),toRR(x.v)))
-		    )
-	       else WrongArg(1,"a number"))
-	  is b:QQcell do (
-	       when a.1
-	       is x:CCcell do ( -- # typical value: log, QQ, CC, CC
-		    toExpr(log(toRR(b.v,precision(x.v)),x.v))
-		    )
-	       is x:RRcell do (    -- -- # typical value: log, QQ, RR, RR
-		    c := toRR(b.v,precision(x.v));
-		    if c>0 && x.v>0 then toExpr(log(c,x.v)) else toExpr(logc(c,x.v))		    
-		    )
-	       is x:ZZcell do (	       -- # typical value: log, QQ, ZZ, RR
-		    if b.v>0 && x.v>0 then toExpr(log(toRR(b.v),toRR(x.v))) else toExpr(logc(toRR(b.v),toRR(x.v)))
-		    )
-	       is x:QQcell do (	       -- # typical value: log, QQ, QQ, RR
-		    if b.v>0 && x.v>0 then toExpr(log(toRR(b.v),toRR(x.v))) else toExpr(logc(toRR(b.v),toRR(x.v)))
-		    )
-	       else WrongArg(1,"a number"))
-	  else WrongArg(2,"a number"))
+	       else WrongArgRRorRRi(2))
+	  else WrongArgRRorRRi(1))
      is x:CCcell do toExpr(log(x.v))				    -- # typical value: log, CC, CC
      is x:RRcell do if isNegative(x.v) then toExpr(logc(x.v)) else toExpr(log(x.v))				    -- # typical value: log, RR, RR
-     is x:ZZcell do if x.v<0 then toExpr(logc(toRR(x.v))) else toExpr(log(toRR(x.v)))			    -- # typical value: log, ZZ, RR
-     is x:QQcell do if x.v<0 then toExpr(logc(toRR(x.v))) else toExpr(log(toRR(x.v)))			    -- # typical value: log, QQ, RR
-     else WrongArg("a number or a pair of numbers")
+     is x:RRicell do if x.v >= 0 then toExpr(log(x.v))  -- # typical value: log, RRi, RRi
+                     else buildErrorPacket("Not defined")
+     else WrongArgRRorCC()
      );
-setupfun("log",log);
+setupfun("log",log).Protected=false;
 agm(e:Expr):Expr := (
      when e
      is a:Sequence do if length(a) != 2 then WrongNumArgs(2) 
@@ -994,38 +1229,25 @@ agm(e:Expr):Expr := (
 	       when a.1
 	       is y:CCcell do toExpr(agm(x.v,y.v)) -- # typical value: agm, CC, CC, CC
 	       is y:RRcell do toExpr(agm(x.v,toCC(y.v)))			            -- # typical value: agm, CC, RR, CC
-	       is y:ZZcell do toExpr(agm(x.v,toCC(y.v,precision(x.v))))	    -- # typical value: agm, CC, ZZ, CC
-	       is y:QQcell do toExpr(agm(x.v,toCC(y.v,precision(x.v))))	    -- # typical value: agm, CC, QQ, CC
-	       else WrongArg(1,"a number"))
+	       else WrongArgRRorCC(2))
 	  is x:RRcell do (
 	       when a.1
 	       is y:CCcell do toExpr(agm(toCC(x.v),y.v)) -- # typical value: agm, RR, CC, CC
 	       is y:RRcell do toExpr(agm(x.v,y.v))			            -- # typical value: agm, RR, RR, RR
-	       is y:ZZcell do toExpr(agm(x.v,toRR(y.v,precision(x.v))))	    -- # typical value: agm, RR, ZZ, RR
-	       is y:QQcell do toExpr(agm(x.v,toRR(y.v,precision(x.v))))	    -- # typical value: agm, RR, QQ, RR
-	       else WrongArg(1,"a number"))
-	  is x:ZZcell do (
-	       when a.1
-	       is y:CCcell do toExpr(agm(toCC(x.v,precision(y.v)),y.v))    -- -- # typical value: agm, ZZ, CC, CC
-	       is y:RRcell do toExpr(agm(toRR(x.v,precision(y.v)),y.v))    -- -- # typical value: agm, ZZ, RR, RR
-	       is y:ZZcell do toExpr(agm(toRR(x.v),toRR(y.v)))	       -- # typical value: agm, ZZ, ZZ, RR
-	       is y:QQcell do toExpr(agm(toRR(x.v),toRR(y.v)))	       -- # typical value: agm, ZZ, QQ, RR
-	       else WrongArg(1,"a number"))
-	  is x:QQcell do (
-	       when a.1
-	       is y:CCcell do toExpr(agm(toCC(x.v,precision(y.v)),y.v))    -- # typical value: agm, QQ, CC, CC
-	       is y:RRcell do toExpr(agm(toRR(x.v,precision(y.v)),y.v))    -- # typical value: agm, QQ, RR, RR
-	       is y:ZZcell do toExpr(agm(toRR(x.v),toRR(y.v)))	    -- # typical value: agm, QQ, ZZ, RR
-	       is y:QQcell do toExpr(agm(toRR(x.v),toRR(y.v)))	    -- # typical value: agm, QQ, QQ, RR
-	       else WrongArg(1,"a number"))
-	  else WrongArg(2,"a number"))
+	       else WrongArgRRorCC(2))
+	  else WrongArgRRorCC(1))
      else WrongNumArgs(2)
      );
-setupfun("agm",agm);
+setupfun("agm",agm).Protected=false;
 -- abs(x:double):double := if x.v < 0. then -x.v else x.v;
 floor(e:Expr):Expr := (
      when e
      is x:RRcell do (
+	  if isnan(x.v) then buildErrorPacket("encountered NotANumber in conversion to integer") else
+	  if isinf(x.v) then buildErrorPacket("encountered infinite real number in conversion to integer") else
+	  toExpr(floor(x.v))
+	  )
+     is x:RRicell do (
 	  if isnan(x.v) then buildErrorPacket("encountered NotANumber in conversion to integer") else
 	  if isinf(x.v) then buildErrorPacket("encountered infinite real number in conversion to integer") else
 	  toExpr(floor(x.v))
@@ -1051,14 +1273,18 @@ round0(e:Expr):Expr := (
 	  if isnan(x.v) then buildErrorPacket("encountered NotANumber in conversion to integer") else
 	  if isinf(x.v) then buildErrorPacket("encountered infinite real number in conversion to integer") else
 	  toExpr(round(x.v.re)))
-     else buildErrorPacket("expected a real number")
+    is x:RRicell do (
+	  if isnan(x.v) then buildErrorPacket("encountered NotANumber in conversion to integer") else
+	  if isinf(x.v) then buildErrorPacket("encountered infinite real number in conversion to integer") else
+	  toExpr(round(x.v)))
+     else WrongArgRRorCC()
      );
 setupfun("round0",round0);
 
 run(e:Expr):Expr := (
      when e
      is x:stringCell do toExpr(run(x.v))
-     else buildErrorPacket("expected a string")
+     else WrongArgString()
      );
 setupfun("run",run);
 
@@ -1066,25 +1292,63 @@ header "#include <math.h>";
 
 sqrt(a:Expr):Expr := (
      when a
-     is x:ZZcell do (
-	  if x.v < 0
-	  then toExpr(toCC(0,sqrt(-toRR(x.v))))
-	  else toExpr(sqrt(toRR(x.v)))			       -- # typical value: sqrt, ZZ, CC
-	  )
-     is x:QQcell do (
-	  if x.v < 0
-	  then toExpr(toCC(0,sqrt(-toRR(x.v))))
-	  else toExpr(sqrt(toRR(x.v)))			       -- # typical value: sqrt, QQ, CC
-	  )
      is x:RRcell do (
 	  if x.v < 0
 	  then toExpr(toCC(0,sqrt(-x.v)))
 	  else toExpr(sqrt(x.v))			       -- # typical value: sqrt, RR, CC
 	  )
+     is x:RRicell do (
+	  if leftRR(x.v) >= 0
+	  then toExpr(sqrt(x.v))                   -- # typical value: sqrt, RRi, RRi
+	  else buildErrorPacket("Not implemented")
+	  )
      is x:CCcell do toExpr(sqrt(x.v))				    -- # typical value: sqrt, CC, CC
      is Error do a
-     else WrongArgRR());
-setupfun("sqrt",sqrt);
+     else WrongArgRRorCC());
+setupfun("sqrt",sqrt).Protected=false;
+
+export toSequence(e:Expr):Expr := (
+     when e
+     is Sequence do e
+     is b:List do (
+	  if b.Mutable
+	  then Expr(new Sequence len length(b.v) do foreach i in b.v do provide i)
+	  else Expr(b.v)
+	  )
+     is s:stringCell do Expr(strtoseq(s))
+     else (
+	 iter := getIterator(e);
+	 if iter != nullE
+	 then (
+	     nextfunc := getNextFunction(iter);
+	     if nextfunc != nullE
+	     then (
+		 r := new Sequence len 1 do provide nullE;
+		 j := 0;
+		 y := nullE;
+		 while (
+		     y = applyEE(nextfunc, iter);
+		     when y
+		     is Error do return returnFromFunction(y)
+		     else nothing;
+		     y != StopIterationE)
+		 do (
+		     if j == length(r) then (
+			 r = new Sequence len 2 * length(r) do (
+			     foreach x in r do provide x;
+			     while true do provide nullE));
+		     r.j = y;
+		     j = j + 1);
+		 Expr(
+		     if j == 0 then emptySequence
+		     else if j == length(r) then r
+		     else new Sequence len j do (
+			 foreach x in r do provide x)))
+	     else buildErrorPacket("no method for applying next to iterator"))
+	 else WrongArg("a list, sequence, string, or iterable object")));
+setupfun("toSequence",toSequence);
+
+-- # typical value: apply, BasicList, BasicList, Function, BasicList
 map(a1:Sequence,a2:Sequence,f:Expr):Expr := (
      newlen := length(a1);
      if newlen != length(a2) then return WrongArg("lists of the same length");
@@ -1136,7 +1400,7 @@ map(a1:Sequence,a2:Sequence,f:Expr):Expr := (
 	       Expr(ret)
 	       )
 	  else (				  -- (x,y) -> ...
-	       if numparms != 2 then WrongNumArgs(model.arrow,numparms,2)
+	       if numparms != 2 then WrongNumArgs(Code(model),numparms,2)
 	       else (
 		    saveLocalFrame := localFrame;
 		    values := new Sequence len framesize do provide nullE;
@@ -1205,6 +1469,7 @@ map(a1:Sequence,a2:Sequence,f:Expr):Expr := (
 	  )
      is s:SpecialExpr do map(a1,a2,s.e)
      else WrongArg(2,"a function"));
+-- # typical value: apply, BasicList, Function, BasicList
 map(a:Sequence,f:Expr):Expr := (
      newlen := length(a);
      if newlen == 0 then return emptySequenceE;
@@ -1263,7 +1528,7 @@ map(a:Sequence,f:Expr):Expr := (
 				   when arg is args:Sequence do (
 					if 1 == length(args) then values.0 = args.0
 					else (
-					     errret = WrongNumArgs(model.arrow,numparms,length(args));
+					     errret = WrongNumArgs(Code(model),numparms,length(args));
 					     while true do provide nullE;
 					     )
 					)
@@ -1290,7 +1555,7 @@ map(a:Sequence,f:Expr):Expr := (
 				   when arg is args:Sequence do (
 					if 1 == length(args) then values.0 = args.0
 					else (
-					     errret = WrongNumArgs(model.arrow,numparms,length(args));
+					     errret = WrongNumArgs(Code(model),numparms,length(args));
 					     while true do provide nullE;
 					     )
 					)
@@ -1329,12 +1594,12 @@ map(a:Sequence,f:Expr):Expr := (
 			      foreach arg in a do (
 				   when arg is args:Sequence do (
 					if 0 != length(args) then (
-					     errret = WrongNumArgs(model.arrow,0,length(args));
+					     errret = WrongNumArgs(Code(model),0,length(args));
 					     while true do provide nullE;
 					     )
 					)
 				   else (
-					errret = WrongNumArgs(model.arrow,numparms,1);
+					errret = WrongNumArgs(Code(model),numparms,1);
 					while true do provide nullE;
 					);
 				   tmp := eval(body);
@@ -1368,12 +1633,12 @@ map(a:Sequence,f:Expr):Expr := (
 					     foreach x at i in args do values.i = x;
 					     )
 					else (
-					     errret=WrongNumArgs(model.arrow,numparms,length(args));
+					     errret=WrongNumArgs(Code(model),numparms,length(args));
 					     while true do provide nullE;
 					     )
 					)
 				   else (
-					errret = WrongNumArgs(model.arrow,numparms,1);
+					errret = WrongNumArgs(Code(model),numparms,1);
 					while true do provide nullE;
 					);
 				   tmp := eval(body);
@@ -1433,6 +1698,7 @@ map(a:Sequence,f:Expr):Expr := (
 	  ret)
      else WrongArg(2,"a function")
      );
+-- # typical value: apply, ZZ, Function, List
 map(newlen:int,f:Expr):Expr := (
      if newlen <= 0 then return emptyList;
      haderror := false;
@@ -1452,7 +1718,7 @@ map(newlen:int,f:Expr):Expr := (
 	       numparms := desc.numparms;
 	       framesize := desc.framesize;
 	       if numparms != 1 then (
-		    errret = WrongNumArgs(model.arrow,numparms,1);
+		    errret = WrongNumArgs(Code(model),numparms,1);
 		    while true do provide nullE;
 		    )
 	       else (
@@ -1559,7 +1825,16 @@ map(e:Expr,f:Expr):Expr := (
 	  if !isInt(i)
 	  then WrongArgSmallInteger()
 	  else map(toInt(i),f))
-     else WrongArg(1,"a list, sequence, or an integer"));
+     -- # typical value: apply, String, Function, Sequence
+     is s:stringCell do (
+	 toSequence(applyEEE(
+		 getGlobalVariable(applyIteratorS), getIterator(e), f)))
+     -- # typical value: apply, Thing, Function, Iterator
+     else (
+	 iter := getIterator(e);
+	 if iter != nullE
+	 then applyEEE(getGlobalVariable(applyIteratorS), iter, f)
+	 else WrongArg(1,"a list, sequence, integer, or iterable object")));
 map(e1:Expr,e2:Expr,f:Expr):Expr := (
      when e1
      is a1:Sequence do (
@@ -1576,7 +1851,9 @@ map(e1:Expr,e2:Expr,f:Expr):Expr := (
 	       is v:Sequence do list(b2.Class,v,b2.Mutable)
 	       else nullE		  -- will not happen
 	       )
-	  else WrongArg(2,"a list or sequence"))
+	  -- # typical value: apply, BasicList, String, Function, Sequence
+	  is s2:stringCell do map(a1, strtoseq(s2), f)
+	  else WrongArg(2,"a list, sequence, or string"))
      is b1:List do (
 	  when e2
 	  is a2:Sequence do (
@@ -1587,18 +1864,27 @@ map(e1:Expr,e2:Expr,f:Expr):Expr := (
 	       )
 	  is b2:List do (
 	       mutable := b1.Mutable;
-	       class := b1.Class;
-	       if class != b2.Class then (
+	       b1class := b1.Class;
+	       if b1class != b2.Class then (
 		    mutable = false;
-		    class = listClass;
+		    b1class = listClass;
 		    );
 	       c := map(b1.v,b2.v,f);
 	       when c is err:Error do if err.message == breakMessage then if err.value == dummyExpr then nullE else err.value else c
-	       is v:Sequence do list(class,v,mutable)
+	       is v:Sequence do list(b1class,v,mutable)
 	       else nullE		  -- will not happen
 	       )
-	  else WrongArg(2,"a list or sequence"))
-     else WrongArg(1,"a list or sequence"));
+	  is s2:stringCell do map(b1.v, strtoseq(s2), f)
+	  else WrongArg(2,"a list, sequence, or string"))
+     is s1:stringCell do (
+	  when e2
+	  -- # typical value: apply, String, BasicList, Function, Sequence
+	  is a2:Sequence do map(strtoseq(s1), a2, f)
+	  is b2:List do map(strtoseq(s1), b2.v, f)
+	  -- # typical value: apply, String, String, Function, Sequence
+	  is s2:stringCell do map(strtoseq(s1), strtoseq(s2), f)
+	  else WrongArg(2, "a list, sequence, or string"))
+     else WrongArg(1,"a list, sequence, or string"));
 map(e:Expr):Expr := (
      when e is a:Sequence do (
 	  if length(a) == 2
@@ -1609,6 +1895,7 @@ map(e:Expr):Expr := (
      else WrongNumArgs(2,3));
 setupfun("apply",map);
 
+-- # typical value: scan, ZZ, Function, Thing
 scan(n:int,f:Expr):Expr := (
      if n <= 0 then return nullE;
      if recursionDepth > recursionLimit then RecursionLimit()
@@ -1624,7 +1911,7 @@ scan(n:int,f:Expr):Expr := (
 	  framesize := desc.framesize;
 	  if numparms != 1 then (
      	       recursionDepth = recursionDepth - 1;
-	       return WrongNumArgs(model.arrow,numparms,1);
+	       return WrongNumArgs(Code(model),numparms,1);
 	       );
 	  if framesize == 1 then (
 	       values := new Sequence len framesize do provide nullE;
@@ -1707,6 +1994,7 @@ scan(n:int,f:Expr):Expr := (
      is s:SpecialExpr do scan(n,s.e)
      else WrongArg(2,"a function"));
 
+-- # typical value: scan, BasicList, Function, Thing
 scan(a:Sequence,f:Expr):Expr := (
      oldlen := length(a);
      if oldlen == 0 then return nullE;
@@ -1756,7 +2044,7 @@ scan(a:Sequence,f:Expr):Expr := (
 				   else (
 					recursionDepth = recursionDepth - 1;
 					localFrame = saveLocalFrame;
-					return WrongNumArgs(model.arrow,numparms,length(args));
+					return WrongNumArgs(Code(model),numparms,length(args));
 					)
 				   )
 			      else values.0 = arg;
@@ -1782,7 +2070,7 @@ scan(a:Sequence,f:Expr):Expr := (
 				   else (
 					recursionDepth = recursionDepth - 1;
 					localFrame = saveLocalFrame;
-					return WrongNumArgs(model.arrow,numparms,length(args));
+					return WrongNumArgs(Code(model),numparms,length(args));
 					)
 				   )
 			      else values.0 = arg;
@@ -1811,13 +2099,13 @@ scan(a:Sequence,f:Expr):Expr := (
 				   if 0 != length(args) then (
 					recursionDepth = recursionDepth - 1;
 					localFrame = saveLocalFrame;
-					return WrongNumArgs(model.arrow,0,length(args));
+					return WrongNumArgs(Code(model),0,length(args));
 					)
 				   )
 			      else (
 				   recursionDepth = recursionDepth - 1;
 				   localFrame = saveLocalFrame;
-				   return WrongNumArgs(model.arrow,numparms,1);
+				   return WrongNumArgs(Code(model),numparms,1);
 				   );
 			      tmp := eval(body);
 			      when tmp is err:Error do (
@@ -1839,13 +2127,13 @@ scan(a:Sequence,f:Expr):Expr := (
 				   else (
 					recursionDepth = recursionDepth - 1;
 					localFrame = saveLocalFrame;
-					return WrongNumArgs(model.arrow,numparms,length(args));
+					return WrongNumArgs(Code(model),numparms,length(args));
 					)
 				   )
 			      else (
 				   recursionDepth = recursionDepth - 1;
 				   localFrame = saveLocalFrame;
-				   return WrongNumArgs(model.arrow,numparms,1);
+				   return WrongNumArgs(Code(model),numparms,1);
 				   );
 			      tmp := eval(body);
 			      when tmp is err:Error do (
@@ -1902,13 +2190,7 @@ scan(a:Sequence,f:Expr):Expr := (
      recursionDepth = recursionDepth - 1;
      nullE);
 
--- scan(a:Sequence,f:Expr):Expr := (
---      foreach x in a do (
--- 	  y := apply(f,x);
--- 	  when y is Error do return y else nothing;
--- 	  );
---      nullE);
-
+-- # typical value: scan, BasicList, BasicList, Function, Thing
 scan(a1:Sequence,a2:Sequence,f:Expr):Expr := (
      newlen := length(a1);
      if newlen != length(a2) then return WrongArg("lists of the same length");
@@ -1951,7 +2233,7 @@ scan(a1:Sequence,a2:Sequence,f:Expr):Expr := (
 	       recursionDepth = recursionDepth - 1;
 	       nullE)
 	  else (				  -- (x,y) -> ...
-	       if numparms != 2 then WrongNumArgs(model.arrow,numparms,2)
+	       if numparms != 2 then WrongNumArgs(Code(model),numparms,2)
 	       else (
 		    saveLocalFrame := localFrame;
 		    values := new Sequence len framesize do provide nullE;
@@ -2034,7 +2316,26 @@ scan(e:Expr,f:Expr):Expr := (
 	  if !isInt(i)
 	  then WrongArgSmallInteger(1)
 	  else scan(toInt(i),f))
-     else buildErrorPacket("scan expects a list"));
+     -- # typical value: scan, Thing, Function, Thing
+     else (
+	 i := getIterator(e);
+	 if i != nullE
+	 then (
+	     nextfunc := getNextFunction(i);
+	     if nextfunc != nullE
+	     then (
+		 y := nullE;
+		 while (
+		     y = applyEE(nextfunc, i);
+		     y != StopIterationE)
+		 do (
+		     tmp := applyEE(f, y);
+		     when tmp
+		     is Error do return returnFromLoop(tmp)
+		     else nothing);
+		 nullE)
+	     else buildErrorPacket("no method for applying next to iterator"))
+	 else WrongArg(1, "a list, sequence, integer, or iterable object")));
 scan(e:Expr):Expr := (
      when e is a:Sequence do (
 	  if length(a) == 2
@@ -2044,26 +2345,41 @@ scan(e:Expr):Expr := (
 	  else WrongNumArgs(2))
      else WrongNumArgs(2));
 setupfun("scan",scan);
+
+nextPrime(e:Expr):Expr := (
+     when e
+     is x:ZZcell do toExpr(nextPrime(x.v - oneZZ))
+     else WrongArgZZ());
+setupfun("nextPrime0", nextPrime);
+
 gcd(x:Expr,y:Expr):Expr := (
      when x
      is a:ZZcell do (
 	  when y
 	  is b:ZZcell do toExpr(gcd(a.v,b.v))
-	  else buildErrorPacket("expected an integer"))
-     else buildErrorPacket("expected an integer"));
+	  else WrongArgZZ(2))
+     else WrongArgZZ(1));
 gcdfun(e:Expr):Expr := accumulate(plus0,plus1,gcd,e);
 setupfun("gcd0",gcdfun);
 
-toSequence(e:Expr):Expr := (
-     when e
-     is Sequence do e
-     is b:List do (
-	  if b.Mutable
-	  then Expr(new Sequence len length(b.v) do foreach i in b.v do provide i)
-	  else Expr(b.v)
-	  )
-     else WrongArg("a list or sequence"));
-setupfun("toSequence",toSequence);
+binomial(e:Expr):Expr := (
+    when e
+    is a:Sequence do (
+	if length(a) == 2 then (
+	    when a.0
+	    is n:ZZcell do (
+		when a.1
+		is k:ZZcell do (
+		    if isNegative(k.v)
+		    then zeroE
+		    else if !isULong(k)
+		    then WrongArgSmallUInteger(2)
+		    else toExpr(binomial(n.v, toULong(k))))
+		else WrongArgZZ(2))
+	    else WrongArgZZ(1))
+	else WrongNumArgs(2))
+    else WrongNumArgs(2));
+setupfun("binomial0", binomial);
 
 sequencefun(e:Expr):Expr := (
      when e

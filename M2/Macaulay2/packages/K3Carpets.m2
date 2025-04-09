@@ -18,9 +18,9 @@ newPackage(
 		  Email => "schreyer@math.uni-sb.de", 
 		  HomePage => "http://www.math.uni-sb.de/ag/schreyer"}},
     	Headline => "K3 double structure on scrolls",
-    	DebuggingMode => true,
+	Keywords => {"Commutative Algebra"},
 	PackageExports => {"CompleteIntersectionResolutions", "NonminimalComplexes"},
-	Reload =>true
+	PackageImports => {"Elimination"}
 	)
 
 export {
@@ -322,7 +322,7 @@ canonicalCarpet = method(Options=>{Characteristic=>32003,FineGrading => false,Sc
 canonicalCarpet(ZZ,ZZ) := opts -> (gen,cliff) -> 
      carpet(gen-cliff-1, cliff,Characteristic => opts.Characteristic, FineGrading => opts.FineGrading,Scrolls=>opts.Scrolls)
 
---Here's a structural approach that instead takes the kernel of the unique map of mainimal degree
+--Here's a structural approach that instead takes the kernel of the unique map of minimal degree
 --from the ideal of the scroll to the canonical module of the scroll. This code produces
 --Gorenstein double structures on ACM varieties more generally. 
 --computationally, the bare hands approach of carpet is much faster.
@@ -514,8 +514,8 @@ correspondenceScroll(I,scroll);
 minimalBetti oo
 ///
 
-{*
----possible rewrite for speed, currently imcomplete.
+-*
+---possible rewrite for speed, currently incomplete.
 Scrolls := apply(#scroll, i->hankelMatrix(T, y_(i,0), 2, scroll_i));
 J0 := sum(#scroll, i->minors(2, Scrolls_i));
 --
@@ -527,7 +527,7 @@ Gd := apply(#Ge, i-> (ceiling (Ge_i/scroll_i)*scroll_i));
 L := apply(#G, i-> product(#scroll, j->(SvarIdeals_j)^(Gd_j-Ge_j))*G_i)
 --now need to translate these in terms of the T variables (and add J0)
 )
-*}
+*-
 
 
 
@@ -853,12 +853,12 @@ rationalOnP1n List := L ->(
     scan(n-1, i->tar = tar||random(S^1, S^{2:{-L_i,-L_i}}));
     tar)
 
-{*
+-*
 restart
 uninstallPackage "K3Carpets"
 loadPackage ("K3Carpets", Reload =>true)
      I = rationalOnP1n({1,1})
-*}
+*-
 
 
 
@@ -945,7 +945,7 @@ document {
    by Francisco Gallego and B.P. Purnaprajna,
    Trans. Amer. Math. Soc. 349 (1997), no. 6, 2477–2492.)",
    PARA{},
-{*   "For $a,b > 1$ he ideal of the carpet and more general a family of degenerate K3 surfaces $X_e(a,b)$ is generated
+-*   "For $a,b > 1$ he ideal of the carpet and more general a family of degenerate K3 surfaces $X_e(a,b)$ is generated
    by the 2x2 minors of the matrices
    $$
 \begin{pmatrix}
@@ -977,7 +977,7 @@ $$
  y_2 & y_3 & ... & y_{b} \\
  \end{pmatrix} 
  $$
-   "*}
+   "*-
    "The carpet lies on the intersection of the cones over two rational normal curves Ca and Cb
    of degrees a>=b. We write the ideal of Ca as the minors of a 2xa matrix X with entries x_i, i= 0..a,
    and similarly for Cb, with  a 2 x b matrix Y with entries y_j. We write Xi for the ith column of X, and
@@ -990,10 +990,10 @@ $$
    "The hyperplane section of a K3 carpet is a canonical ribbon indexed by genus g=a+b+1 and clifford index b.
    ",
     PARA{},
-    "The K3 carpets generalize to a family of degenerate K3 surfaces which are unoins of two scrolls,
+    "The K3 carpets generalize to a family of degenerate K3 surfaces which are unions of two scrolls,
     whose hyperplane sections are reducible canonical curves consisting of two rational normal curves of degree
     g-1 intersecting in g+1 points. The functions in this package explore the syzygies of these surfaces
-    for fields of arbitrary characteristic. Inparticular, the functions in the package allow for g <= 15 a computational proof of the following
+    for fields of arbitrary characteristic. In particular, the functions in the package allow for g <= 15 a computational proof of the following
     conjecture.",
     PARA{},
      HREF("http://arxiv.org","Conjecture 0.1") ,
@@ -1108,13 +1108,13 @@ doc ///
     a2:ZZ
      a1 and a2 should be positive
     m:Matrix
-     a 2xn matrix for some n >=a1+a2
+     a 2xn matrix for some $n \ge{} a1+a2$
     Characteristic => ZZ 
      the characteristic of the ground field
     Scrolls =>  Boolean
      if true return in addition the matrices defining the sections
     FineGrading => Boolean
-     if true then I is defined over the ring with ZZ^4-grading
+     if true then I is defined over the ring with $\ZZ^4$-grading
    Outputs
     I:Ideal
     xmat: Matrix
@@ -1125,7 +1125,7 @@ doc ///
      If no matrix m is present then the script creates a type a1,a2 K3-carpet over a new ring. If m is given,
      then an ideal made from certain minors and sums of minors of m is produced.
      The characteristic is given by the option, defaulting to 32003.
-     If the option FineGrading is set to true, then the ideal is returned with the natural ZZ^4 grading
+     If the option FineGrading is set to true, then the ideal is returned with the natural $\ZZ^4$ grading
      (the default is FineGrading => false). This last may not work unless the matrix is of scroll type (or
      not given!) If Scrolls=>true, then a sequence of three items is returned, the second
      and third being the smaller and larger scroll matrices.
@@ -1135,10 +1135,10 @@ doc ///
      two matrices from m:
      X:the 2 x a matrix that is the first a cols of m;
      Y:the 2 x b matrix that is the nex b cols of m--that is, cols a1..a1+a2-1 of m;
-     Let Ix, Iy be the ideals of 2 x 2 minors of X and Y. If a,b\geq 2,the routine returns
+     Let Ix, Iy be the ideals of 2 x 2 minors of X and Y. If $a,b\geq 2$,the routine returns
      Ix+Iy+Imixed, where Imixed
      consists of the quadrics "outside minor - inside minor", that is,
-     det(X_{\{i\}},Y_{\{j+1\}})-det(X_{\{i+1\}}|Y_{\{j\}}),
+     $det(X_{\{i\}},Y_{\{j+1\}})-det(X_{\{i+1\}}|Y_{\{j\}})$,
      for each pair of (i,i+1), (j,j+1) in the ranges a1 and a2.
      
      If m is usual ideal of the scroll of type (a,b), then carpet(a,b,m) produces the same ideal
@@ -1147,26 +1147,26 @@ doc ///
      The ideal I to be constructed is the ideal of the unique (numerically) K3 scheme that is a double
      structure on the scroll S(a1,a2).
      
-     When a,b > 1, the carpet ideal I is the sum Ix+Iy plus
+     When a,b > 1, the carpet ideal I is the sum $Ix+Iy$ plus
      the ideal Imixed 
      
-     When a = b = 1, I is the square of the det of X|Y.
+     When a = b = 1, I is the square of the determinant of X|Y.
 
      When a = 1, b>1 (or symmetrically), I is defined as in the case a,b>1, after replacing
+     $$ X = \begin{pmatrix} 
+                x_0 \\ 
+		x_1 
+	    \end{pmatrix}
+     $$
 
-     X = \begin{pmatrix}
-     x_0\\
-     x_1
-     \end{pmatrix}
-     
      by the 2 x 2 matrix
-     
-     \begin{pmatrix}
-     x_0^2, x_0*x_1\\
-     x_0*x_1, x_1^2
-     \end{pmatrix}.
+     $$ \begin{pmatrix} 
+            x_0^2    &  x_0*x_1 \\
+	    x_0*x_1  &  x_1^2
+	\end{pmatrix}
+     $$
+     and changing $a$ to 2.
 
-     and changing a to 2.
     Example
      betti res carpet(2,5)
      S = ZZ/101[a..j]
@@ -1178,7 +1178,7 @@ doc ///
     Text
      
    Caveat
-    We require a1,a2 >=1. If a1>a2 then the blocks are reversed, so that the smaller block always comes first.
+    We require $a1,a2 \ge 1$. If $a1>a2$ then the blocks are reversed, so that the smaller block always comes first.
     The script generalizeScroll is a more general tool that can do the same things.   
    SeeAlso
     canonicalCarpet
@@ -1209,7 +1209,7 @@ doc ///
     Scrolls =>  Boolean
      if true return in addition the matrices defining the sections
     FineGrading => Boolean
-     if true then I is defined over the ring with ZZ^4-grading
+     if true then I is defined over the ring with $\ZZ^4$-grading
    Outputs
     I:Ideal
      ideal of the K3 Carpet of (sectional) genus g, Clifford index cliff
@@ -1217,7 +1217,7 @@ doc ///
     Text
      This is just a re-indexing of the carpet script:
      canonicalCarpet(g,cliff) = carpet(g-cliff-1, cliff).
-     Here the natural choices for cliff are 1 \leq cliff \leq (g-1)//2.
+     Here the natural choices for cliff are $1 \leq{} cliff \leq{} (g-1)//2$.
    SeeAlso
     carpet
 ///
@@ -1239,7 +1239,7 @@ doc ///
      a+1 is the degree of the strand
    Outputs
      L:List
-      the diagonal entries of the Smith normal form of a the cruital
+      the diagonal entries of the Smith normal form of a the crucial
       matrix
    Description
     Text
@@ -1280,7 +1280,7 @@ doc ///
       a complex over S, the same as F but now with homogeneous with respect to all gradings of S   
    Description
     Text
-     Given a resolution F of an ideal, with carries additional homogenity with respect
+     Given a resolution F of an ideal, with carries additional homogeneity with respect
      to the finer graded ring S, we compute the grading.
     Example
      a=3,b=3
@@ -1411,7 +1411,7 @@ doc ///
        Betti tables of the degenerate K3 for various characteristics of the ground field  
    Description
     Text
-     We compute the equation and nonminimal resolution F of the degeneate K3 of type (a,b,e)
+     We compute the equation and nonminimal resolution F of the degenerate K3 of type (a,b,e)
      where $a \ge b$ over a large finite prime field, lift the complex to the integers,
      which is possible if the coefficients are small. Finally we study the nonminimal
      strands over ZZ by computing the Smith normal form. The resulting data allow us
@@ -1434,7 +1434,7 @@ doc ///
    Caveat
      Already for (e_1,e_2) fairly small, the algorithm might give wrong answers
      since the lift to characteristic zero  might be incorrect. A correction is easy to implement as soon
-     res(.,FastNonminimal=>true) allows QQ (or ZZ) as coefficient ring. Another possibily
+     res(.,FastNonminimal=>true) allows QQ (or ZZ) as coefficient ring. Another possibility
      would be to use the Chinese remainder for lifting to ZZ.
    SeeAlso
     carpetBettiTable
@@ -1517,7 +1517,7 @@ doc ///
      of names
    Description
     Text
-     We name the generators of the syzygies by the list ofthe  monomial parts 
+     We name the generators of the syzygies by the list of the monomial parts 
      of the leadTerm with position m recursively:
      
      schreyerName(F,i,n) = append(schreyerName(F,i-1,m),mon)
@@ -1555,7 +1555,7 @@ doc ///
     Characteristic => ZZ 
      the characteristic of the ground field
     FineGrading => Boolean
-     if true then F is defined over the ring with ZZ^4-grading
+     if true then F is defined over the ring with $\ZZ^4$-grading
    Outputs
     F:ChainComplex
      free resolution of the canonical carpet of genus g, clifford index cliff
@@ -1564,7 +1564,7 @@ doc ///
    Description
     Text
      By default the option FineGrading is set to false. With FineGrading=>true
-     the script returns the ZZ^4-graded resolution, and the function h returns the homotopies
+     the script returns the $\ZZ^4$-graded resolution, and the function h returns the homotopies
      one graded component at a time as a HashTable. 
      
      Note that the homotopies are 0
@@ -1622,7 +1622,7 @@ doc ///
    Description
     Text
      The default is FineGrading => false. If the option FineGrading=>true is given, then the 
-     ideal returned has the natural ZZ^4 grading, where x_i has degree \{1,0,i,a-i\}\ and 
+     ideal returned has the natural $\ZZ^4$ grading, where x_i has degree \{1,0,i,a-i\}\ and 
      y_i has degree \{0,1,i,b-i\}. 
      (Note that after the call carpet(a1,a2) we have a = min(a1,a2), b = max(a1,a2).)
 ///
@@ -1705,7 +1705,7 @@ doc ///
 ///
 
 
-{*
+-*
 doc ///
    Key
     rationalOnP1n
@@ -1731,7 +1731,7 @@ doc ///
      S = ring I;
      isHomogeneous I
 ///
-*}
+*-
 
 doc ///
    Key
@@ -1783,7 +1783,7 @@ doc ///
      ST = (flattenRing(T**S))_0
      irrel = irrelevantIdeal ST;
     Text
-     Here the irrelevant ideal is the intersection of the 4 ideals of coordinats
+     Here the irrelevant ideal is the intersection of the 4 ideals of coordinates
      (P^2 and the three copies of P^1).
      Next, define the pairs of sections on the curve giving the three projections:
     Example
@@ -2059,7 +2059,7 @@ doc ///
    Description
     Text 
      We compute the twists of the relative resolution in the resonance scroll of a degenerate K3 
-     X_e(a,b) in case of k resonance after re-embedding the resonace scroll with |H+jR|
+     X_e(a,b) in case of k resonance after re-embedding the resonance scroll with |H+jR|
      for j=am-a_0=bm-b_0 where $\{a_i\}|\{b_j\}$ is the splitting type of the resonance scroll. 
     Example
      F = relativeResolution(5,4,3);
@@ -2087,7 +2087,7 @@ doc ///
     b:ZZ
      type of the degenerate K3
     k:ZZ
-     the resonace
+     the resonance
    Outputs
     as:List
     bs:List
@@ -2219,7 +2219,7 @@ lineCorrespondence(List,List) := (scroll,correspondence) ->(
     --what should one do in the case one of the scroll sizes is < the correspondence size?
     --when the scroll size is 1, it's easy -- just take the corresponding secant matrix to
     --be a column using the correspondence-size monomials. But in general??
-    n := #scroll; -- dimension of the scroll -- note that in this contruction the line corr is bigger
+    n := #scroll; -- dimension of the scroll -- note that in this construction the line corr is bigger
     p := reverse sort apply(n, i->{scroll_i,correspondence_i}); -- put biggest scrolls first
     sscroll := p/(i->i_0); -- sorted scroll sizes
     scorr :=  p/(i->i_1); -- sorted correspondence degrees

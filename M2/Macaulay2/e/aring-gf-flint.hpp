@@ -8,15 +8,23 @@
 // The following needs to be included before any flint files are included.
 #include <M2/gc-include.h>
 
+// includes gmp.h, which is required for FLINT functions that use GMP
+#include <M2/math-include.h>
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <flint/fq_zech.h>
-#include <flint/flint.h>
+#include <flint/flint.h>      // for flint_rand_t, fmpz_t, ulong
+#include <flint/fmpz.h>       // for fmpz_clear_readonly, fmpz_init_set_...
+#include <flint/fq_nmod.h>    // for fq_nmod_clear, fq_nmod_init, fq_nmod_c...
+#include <flint/fq_zech.h>    // for fq_zech_clear, fq_zech_ctx_clear, fq_z...
+#include <flint/nmod_poly.h>  // for nmod_poly_set_coeff_ui, nmod_poly_clear
 #pragma GCC diagnostic pop
 
+#include "interface/random.h"
 #include "aring.hpp"
 #include "buffer.hpp"
 #include "ringelem.hpp"
+#include "exceptions.hpp"           // for exc::division_by_zero_error
 
 class PolynomialRing;
 class RingElement;
@@ -33,6 +41,59 @@ class ARingGFFlint : public RingInterface
   static const RingID ringID = ring_GFFlintZech;
   typedef fq_zech_struct ElementType;
   typedef ElementType elem;
+  typedef std::vector<elem> ElementContainerType;
+
+  /**
+   * \brief A wrapper class for ElementType
+   *
+   * This keeps a pointer to the fq_zech_ctx_struct as it's needed to
+   * implement the destructor
+   */
+  class Element : public ElementImpl<ElementType>
+  {
+   public:
+    Element() = delete;
+    Element(Element&& other) : mContext(other.mContext)
+    {
+      // figure out how to move the value without the context
+      fq_zech_init2(&mValue, mContext);
+      fq_zech_set(&mValue, &other.mValue, mContext);
+    }
+    explicit Element(const ARingGFFlint& R) : mContext(R.mContext)
+    {
+      fq_zech_init2(&mValue, mContext);
+    }
+    Element(const ARingGFFlint& R, const ElementType& value) : mContext(R.mContext)
+    {
+      R.init_set(mValue, value);
+    }
+    ~Element() { fq_zech_clear(&mValue, mContext); }
+
+   private:
+    const fq_zech_ctx_struct* mContext;
+  };
+
+  class ElementArray
+  {
+    const fq_zech_ctx_struct* mContext;
+    const size_t mSize;
+    std::unique_ptr<ElementType[]> mData;
+
+   public:
+    ElementArray(const ARingGFFlint& R, size_t size)
+        : mContext(R.mContext), mSize(size), mData(new ElementType[size])
+    {
+      for (size_t i = 0; i < mSize; i++) fq_zech_init2(&mData[i], mContext);
+    }
+    ~ElementArray()
+    {
+      for (size_t i = 0; i < mSize; i++) fq_zech_clear(&mData[i], mContext);
+    }
+    ElementType& operator[](size_t idx) { return mData[idx]; }
+    const ElementType& operator[](size_t idx) const { return mData[idx]; }
+    ElementType *data() { return mData.get(); }
+    const ElementType *data() const { return mData.get(); }
+  };
 
   ARingGFFlint(const PolynomialRing& R, const ring_elem a);
 
@@ -75,12 +136,17 @@ class ARingGFFlint : public RingInterface
   {
     // we only use this data type for GF's smaller than 32 bits, since
     // this class creates lookup tables that are way too big otherwise.
-    result.int_val = static_cast<int>(a.value);
+    result = ring_elem(static_cast<int>(a.value));
   }
 
   void from_ring_elem(ElementType& result, const ring_elem& a) const
   {
-    result.value = a.int_val;
+    result.value = a.get_int();
+  }
+
+  ElementType from_ring_elem_const(const ring_elem& a) const
+  {
+    return {.value = static_cast<mp_limb_t>(a.get_int())};
   }
 
   bool is_unit(const ElementType& f) const { return not is_zero(f); }
@@ -123,13 +189,13 @@ class ARingGFFlint : public RingInterface
     // printf("variable is %lu\n", result.value);
   }
 
-  void set_from_mpz(ElementType& result, mpz_ptr a) const
+  void set_from_mpz(ElementType& result, mpz_srcptr a) const
   {
     int b = static_cast<int>(mpz_fdiv_ui(a, characteristic()));
     set_from_long(result, b);
   }
 
-  bool set_from_mpq(ElementType& result, mpq_ptr a) const
+  bool set_from_mpq(ElementType& result, mpq_srcptr a) const
   {
     ElementType n, d;
     init(n);
@@ -149,8 +215,9 @@ class ARingGFFlint : public RingInterface
 
   void invert(ElementType& result, const ElementType& a) const
   {
-    assert(not is_zero(a));
-    fq_zech_inv(&result, &a, mContext);
+    if (is_zero(a))
+      throw exc::division_by_zero_error();
+    else fq_zech_inv(&result, &a, mContext);
   }
 
   void add(ElementType& result,
@@ -201,7 +268,6 @@ class ARingGFFlint : public RingInterface
       printf("\n  b = ");
       fq_zech_print_pretty(&b, mContext);
 #endif
-    assert(not is_zero(b));
     invert(c, b);
 #if 0
       printf("\n  1/b = ");
@@ -218,9 +284,7 @@ class ARingGFFlint : public RingInterface
 
   void power(ElementType& result, const ElementType& a, int n) const
   {
-    if (is_zero(a))
-      set_zero(result);
-    else if (n < 0)
+    if (n < 0)
       {
         invert(result, a);
         fq_zech_pow_ui(&result, &result, -n, mContext);
@@ -229,28 +293,22 @@ class ARingGFFlint : public RingInterface
       fq_zech_pow_ui(&result, &a, n, mContext);
   }
 
-  void power_mpz(ElementType& result, const ElementType& a, mpz_ptr n) const
+  void power_mpz(ElementType& result, const ElementType& a, mpz_srcptr n) const
   {
-    if (is_zero(a))
-      {
-        set_zero(result);
-        return;
-      }
-    bool neg = false;
     if (mpz_sgn(n) < 0)
-      {
-        neg = true;
-        mpz_neg(n, n);
-        invert(result, a);
-      }
+      invert(result, a);
     else
       copy(result, a);
 
+    mpz_t abs_n;
+    mpz_init(abs_n);
+    mpz_abs(abs_n, n);
+    
     fmpz_t fn;
-    fmpz_init_set_readonly(fn, n);
+    fmpz_init_set_readonly(fn, abs_n);
     fq_zech_pow(&result, &result, fn, mContext);
     fmpz_clear_readonly(fn);
-    if (neg) mpz_neg(n, n);
+    mpz_clear(abs_n);
   }
 
   void swap(ElementType& a, ElementType& b) const
@@ -281,8 +339,11 @@ class ARingGFFlint : public RingInterface
 
   void random(ElementType& result) const
   {
-    //      printf("calling ARingGFFlint::random\n");
-    fq_zech_randtest(&result, mRandomState, mContext);
+    std::vector<long> poly;
+    for (int i = 0; i < dimension(); ++i)
+      poly.push_back(rawRandomULong(characteristic()));
+    fromSmallIntegerCoefficients(result, poly);
+    //    fq_zech_randtest(&result, mRandomState, mContext);
   }
 
   void fromSmallIntegerCoefficients(ElementType& result,

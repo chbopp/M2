@@ -6,6 +6,8 @@
 #ifndef GC_INCLUDED
   #define GC_INCLUDED 1
 
+  // IWYU pragma: begin_exports
+
   #ifdef GC_MALLOC
    #error "gc.h already included"
   #endif
@@ -14,14 +16,6 @@
     #define GC_LINUX_THREADS
   #endif 
 
-  #ifdef HAVE_WINSOCK2_H
-   #include <winsock2.h>
-     /* Under mingw64, winsock2.h should be included before including windows.h,
-	and pthread.h and gc.h include windows.h;
-	therefore winsock2.h should be included before pthread.h and gc.h */
-   #undef ERROR
-  #endif
-
   #define _REENTRANT 1
   #include <pthread.h>
 
@@ -29,14 +23,38 @@
   #define __need_sigset_t 1
   #include <signal.h>
 
+  /* for size_t: */
+  #include <stdlib.h>
+  /* for memcpy: */
+  #include <string.h>
+
   #ifdef NDEBUG
    #define GC_IGNORE_WARN 1
   #endif
 
   #define GC_THREADS 1
+
+  /*
+   * these two macros affect the definition of GC_INIT, but have
+   * to appear before we include gc.h, in order to take effect
+   */
+  // #define GC_FREE_SPACE_DIVISOR 12
+  #define GC_INITIAL_HEAP_SIZE 70000000	// may be overridden in e.g. bin/main.cpp
+
   #include <gc/gc.h>
 
   #if defined(__cplusplus)
-    #include <gc/gc_cpp.h>
+    #define GC_NEW_ABORTS_ON_OOM
+    #ifdef __CYGWIN__
+      /* prevent gc from defining global new and delete methods */
+      #undef __CYGWIN__
+      #include <gc/gc_cpp.h>
+      #define __CYGWIN__ 1
+    #else
+      #include <gc/gc_cpp.h>
+    #endif
   #endif
+
+  // IWYU pragma: end_exports
+
 #endif

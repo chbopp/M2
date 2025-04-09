@@ -19,7 +19,8 @@ affineImage(Matrix,Polyhedron,Matrix) := (A,P,v) -> (
    v = v * (matrix {toList((numColumns vertices P):1_QQ)});
    Mv := A*(vertices P) + v;
    Mr := A*(rays P);
-   convexHull(Mv,Mr)
+   Ml := A*(linealitySpace P);
+   convexHull(Mv, Mr, Ml)
 )
 
 
@@ -86,7 +87,7 @@ affinePreimage(Matrix,Polyhedron,Matrix) := (A,P,b) -> (
      w = w - (N * b);
      M = M * A;
      N = N * A;
-     intersection(M,v,N,w))
+     polyhedronFromHData(M,v,N,w))
 
 
 --   INPUT : '(A,P)',  where 'A' is a ZZ or QQ matrix from some source space to the 
@@ -142,5 +143,5 @@ linearTransform(Fan, Matrix) := (F, A) -> (
       computedLinealityBasis => newLineality,
       generatingObjects => maxCones F
    };
-   return fan result
+   internalFanConstructor result
 )

@@ -1,5 +1,4 @@
--- -*- M2-comint -*- {* hash: 438712966 *}
---loading configuration for package "Bertini" from file /Users/jo/Library/Application Support/Macaulay2/init-Bertini.m2
+-- -*- M2-comint -*- hash: 6438836643559783046
 
 i1 : valueBM2("1.22e-2 4e-5")
 

@@ -15,8 +15,10 @@ newPackage(
 	      Email => "schreyer@math.uni-sb.de",
 	      HomePage => "http://www.math.uni-sb.de/ag/schreyer/"}
                    },
-    	Headline => "Construction of random plane curves",
+    	Headline => "random plane curves",
+	Keywords => {"Examples and Random Objects"},
 	PackageExports => {"RandomObjects"},
+	PackageImports => {"Truncations"},
     	DebuggingMode => false
         )
 
@@ -32,9 +34,6 @@ export{"distinctPlanePoints",
        "completeLinearSystemOnNodalPlaneCurve",
        "imageUnderRationalMap"
        }
-
-
-needsPackage "RandomObjects"
 
 undocumented {
      constructNodalPlaneCurve,
@@ -69,7 +68,7 @@ constructDistinctPlanePoints(ZZ,PolynomialRing):=opt->(k,R)->(
 
 -- the certification tests that the
 -- scheme of the points is smooth, i.e. that
--- there are no infinitisimally close points
+-- there are no infinitesimally close points
 
 certifyDistinctPlanePoints=method(TypicalValue=>Boolean)
 certifyDistinctPlanePoints(Ideal,ZZ,PolynomialRing):= (I,k,R)->
@@ -149,6 +148,12 @@ beginDocumentation()
 doc ///
  Key
    RandomPlaneCurves
+ Headline
+   random plane curves
+ Description
+   Text
+    This package generates random nodal plane curves and provides related
+    methods.
 ///
 
 doc ///

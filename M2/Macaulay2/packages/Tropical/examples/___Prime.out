@@ -1,14 +1,10 @@
--- -*- M2-comint -*- hash: -1813380371
---loading configuration for package "FourTiTwo" from file /Users/dan/Library/Application Support/Macaulay2/init-FourTiTwo.m2
---loading configuration for package "gfanInterface" from file /Users/dan/Library/Application Support/Macaulay2/init-gfanInterface.m2
---loading configuration for package "Tropical" from file /Users/dan/Library/Application Support/Macaulay2/init-Tropical.m2
--- polymake is installed
+-- -*- M2-comint -*- hash: 9003283797531820781
 
 i1 : QQ[x,y,z];
 
 i2 : I=ideal(x^2+y^2-2*x*y);
 
-o2 : Ideal of QQ[x, y, z]
+o2 : Ideal of QQ[x..z]
 
 i3 : isPrime I
 

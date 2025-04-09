@@ -3,6 +3,9 @@
 #ifndef _aring_QQ_gmp_hpp_
 #define _aring_QQ_gmp_hpp_
 
+#include "interface/gmp-util.h"  // for mpz_reallocate_limbs
+#include "interface/random.h"    // for rawSetRandomQQ
+
 #include "aring.hpp"
 #include "buffer.hpp"
 #include "ringelem.hpp"
@@ -19,13 +22,14 @@ namespace M2 {
    @brief wrapper for the gmp mpq_t integer representation
 */
 
-class ARingQQGMP : public RingInterface
+class ARingQQGMP : public SimpleARing<ARingQQGMP>
 {
  public:
   static const RingID ringID = ring_QQ;
 
   typedef __mpq_struct ElementType;
   typedef ElementType elem;
+  typedef std::vector<elem> ElementContainerType;
 
   ARingQQGMP();
   ~ARingQQGMP();
@@ -81,7 +85,7 @@ class ARingQQGMP : public RingInterface
   }
 
   void init(ElementType& result) const { mpq_init(&result); }
-  void clear(ElementType& result) const { mpq_clear(&result); }
+  static void clear(ElementType& result) { mpq_clear(&result); }
   void set(ElementType& result, const ElementType& a) const
   {
     mpq_set(&result, &a);
@@ -93,7 +97,7 @@ class ARingQQGMP : public RingInterface
     mpq_set_si(&result, a, 1);
   }
 
-  void set_from_mpz(ElementType& result, const mpz_ptr a) const
+  void set_from_mpz(ElementType& result, mpz_srcptr a) const
   {
     mpz_set(mpq_numref(&result), a);
     mpz_set_ui(mpq_denref(&result), 1);
@@ -109,7 +113,7 @@ class ARingQQGMP : public RingInterface
     return false;
   }
 
-  bool set_from_mpq(ElementType& result, const mpq_ptr a) const
+  bool set_from_mpq(ElementType& result, mpq_srcptr a) const
   {
     mpq_set(&result, a);
     return true;
@@ -170,34 +174,32 @@ class ARingQQGMP : public RingInterface
   }
 
   ///@brief test doc
-  bool divide(ElementType& result,
+  void divide(ElementType& result,
               const ElementType& a,
               const ElementType& b) const
   {
-    if (is_zero(b)) return false;
+    if (is_zero(b)) throw exc::division_by_zero_error();
     mpq_div(&result, &a, &b);
-    return true;
   }
 
   void power(ElementType& result, const ElementType& a, long n) const
   {
-    assert(n >= 0);
-    if (n >= 0)
+    bool n_is_negative = false;
+    if (n < 0)
       {
-        mpz_pow_ui(mpq_numref(&result), mpq_numref(&a), n);
-        mpz_pow_ui(mpq_denref(&result), mpq_denref(&a), n);
-      }
-    else
-      {
+        if (is_zero(a)) throw exc::division_by_zero_error();
+        n_is_negative = true;
         n = -n;
-        mpz_pow_ui(mpq_numref(&result), mpq_denref(&a), n);
-        mpz_pow_ui(mpq_denref(&result), mpq_numref(&a), n);
       }
+    mpz_pow_ui(mpq_numref(&result), mpq_numref(&a), n);
+    mpz_pow_ui(mpq_denref(&result), mpq_denref(&a), n);
+    if (n_is_negative)
+      mpq_inv(&result, &result);
   }
 
   void power_mpz(ElementType& result,
                  const ElementType& a,
-                 const mpz_ptr n) const
+                 mpz_srcptr n) const
   {
     std::pair<bool, int> n1 = RingZZ::get_si(n);
     if (n1.first)
@@ -217,7 +219,7 @@ class ARingQQGMP : public RingInterface
   void swap(ElementType& a, ElementType& b) const { mpq_swap(&a, &b); }
   void random(ElementType& result) const
   {
-    rawSetRandomQQ(&result, 0);
+    rawSetRandomQQ(&result, nullptr);
 #if 0
       mpz_urandomb(mpq_numref(&result), mRandomState, mMaxHeight);
       mpz_urandomb(mpq_denref(&result), mRandomState, mMaxHeight);
@@ -244,18 +246,24 @@ class ARingQQGMP : public RingInterface
 
   void to_ring_elem(ring_elem& result, const ElementType& a) const
   {
-    gmp_QQ b = getmemstructtype(gmp_QQ);
+    mpq_ptr b = getmemstructtype(mpq_ptr);
     mpq_init(b);
     mpq_set(b, &a);
-    result.poly_val = reinterpret_cast<Nterm*>(b);
+    mpz_reallocate_limbs(mpq_numref(b));
+    mpz_reallocate_limbs(mpq_denref(b));
+    result = ring_elem(b);
   }
 
   void from_ring_elem(ElementType& result, const ring_elem& a) const
   {
     // Currently, until QQ becomes a ConcreteRing, elements of QQ are gmp_QQ
     // (aka mpq_t)
-    gmp_QQ t = reinterpret_cast<gmp_QQ>(const_cast<Nterm*>(a.poly_val));
-    mpq_set(&result, t);
+    mpq_set(&result, a.get_mpq());
+  }
+
+  const ElementType& from_ring_elem_const(const ring_elem& a) const
+  {
+    return *a.get_mpq();
   }
 
 /** @} */

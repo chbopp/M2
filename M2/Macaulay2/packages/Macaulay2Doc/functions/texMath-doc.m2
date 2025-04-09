@@ -2,50 +2,7 @@
 --- author(s): from before
 --- notes: 
 
-undocumented {
-	(texMath, InfiniteNumber),
-	(texMath, SparseVectorExpression),
-	(texMath, Divide),
-	(texMath, FunctionApplication),
-	(texMath, Thing),
-	(texMath, Power),
-	(texMath, ZeroExpression),
-	(texMath, SparseMonomialVectorExpression),
-	(texMath, Subscript),
-	(texMath, OneExpression),
-	(texMath, STRONG),
-	(texMath, Superscript),
-	(texMath, Function),
-	(texMath, Expression),
-	(texMath, Sum),
-	(texMath, Symbol),
-	(texMath, Hypertext),
-	(texMath, SUB),
-	(texMath, SUP),
-	(texMath, Net),
-	(texMath, String),
-	(texMath, ITALIC),
-	(texMath, MatrixExpression),
-	(texMath, Boolean),
-	(texMath, RowExpression),
-	(texMath, PolynomialRing),
-	(texMath, List),
-	(texMath, TEX),
-	(texMath, Sequence),
-	(texMath, Array),
-	(texMath, TT),
-	(texMath, Product),
-	(texMath, ZZ),
-	(texMath, Adjacent),
-	(texMath, Holder),
---	(texMath, Holder2),
-	(texMath, QuotientRing),
-	(texMath, RR),
-	(texMath, ChainComplex),
-	(texMath, TABLE),
-	(texMath, Minus),
-	(texMath, Nothing)
-     }
+undocumented methods texMath
 
 document { 
      Key => texMath,
@@ -58,7 +15,7 @@ document {
 	  String => {TT "x", " converted to TeX math format"}
 	  },
      "The main difference between this and ", TO tex, " is that the
-     surrouding dollar signs aren't there.",
+     surrounding dollar signs aren't there.",
      EXAMPLE {
 	  "R = ZZ[x];",
       	  "texMath (x-1)^6",

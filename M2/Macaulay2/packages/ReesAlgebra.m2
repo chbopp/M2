@@ -1,5 +1,5 @@
 -------------------------------------------------------------------------
--- PURPOSE : Compute the rees algebra of a module as it is defined in the 
+-- PURPOSE : Compute the Rees algebra of a module as it is defined in the 
 --           paper "What is the Rees algebra of a module?" by Craig Huneke, 
 --           David Eisenbud and Bernde Ulrich.
 --           Also to compute many of the structures that require a Rees 
@@ -19,8 +19,8 @@
 ---------------------------------------------------------------------------
 newPackage(
 	"ReesAlgebra",
-    	Version => "2.2", 
-    	Date => "November 2017",
+    	Version => "2.3", 
+    	Date => "November 2019",
     	Authors => {{
 		  Name => "David Eisenbud",
 		  Email => "de@msri.org"},
@@ -29,9 +29,23 @@ newPackage(
              {Name => "Sorin Popescu",
 	      Email => "sorin@math.sunysb.edu"},
 	     {Name => "Michael E. Stillman", Email => "mike@math.cornell.edu"}},  
-    	--DebuggingMode => false,
-	Reload =>true,
-    	Headline => "Rees algebras"
+    	DebuggingMode => false,
+    	Headline => "Rees algebras",
+	Keywords => {"Commutative Algebra"},
+	Certification => {
+	     "journal name" => "The Journal of Software for Algebra and Geometry",
+	     "journal URI" => "https://msp.org/jsag/",
+	     "article title" => "The ReesAlgebra package in Macaulay2",
+	     "acceptance date" => "21 May 2018",
+	     "published article URI" => "https://msp.org/jsag/2018/8-1/p05.xhtml",
+	     "published article DOI" => "10.2140/jsag.2018.8.49",
+	     "published code URI" => "https://msp.org/jsag/2018/8-1/jsag-v8-n1-x05-ReesAlgebra.m2",
+	     "repository code URI" => "https://github.com/Macaulay2/M2/blob/master/M2/Macaulay2/packages/ReesAlgebra.m2",
+	     "release at publication" => "0ccfca1d3d08d13ed0da78435b2106209fcee1b1",	    -- git commit number in hex
+	     "version at publication" => "2.2",
+	     "volume number" => "8",
+	     "volume URI" => "https://msp.org/jsag/2018/8-1/"
+	     }
 	)
 -*
 restart
@@ -43,14 +57,14 @@ check "ReesAlgebra"
 *-
 
 export{
-  "analyticSpread", 
+  "analyticSpread",
+  "associatedGradedRing",
   "distinguished",
   "intersectInP",
   "isLinearType", 
   "minimalReduction",
   "isReduction",
   "multiplicity",
-  "normalCone", 
   "reductionNumber",
   "reesIdeal",
   "reesAlgebra",
@@ -61,18 +75,16 @@ export{
   "whichGm",
   "Tries",
   "jacobianDual",
-  "Jacobian",
   "symmetricAlgebraIdeal",
   "expectedReesIdeal",
   "PlaneCurveSingularities",
   --synonyms
-  "associatedGradedRing" => "normalCone",
-  "reesAlgebraIdeal" => "reesIdeal"
+  "reesAlgebraIdeal" => "reesIdeal",
+  "Trim" -- option in reesIdeal
   }
 
-
 symmetricAlgebraIdeal = method(Options =>
-    {             VariableBaseName => "w",
+    {             VariableBaseName => "w"
      })
 symmetricAlgebraIdeal Module := Ideal => o -> M -> (
     ideal presentation symmetricAlgebra(M, o))
@@ -108,36 +120,40 @@ reesIdeal = method(
 	  PairLimit => infinity,
 	  MinimalGenerators => true,
 	  Strategy => null,
-	  Variable => "w"
+	  Variable => "w",
+	  Trim => true
 	  }
       )
 
 --the following uses a versal embedding
 reesIdeal(Module) := Ideal => o -> M -> (
-     P := presentation minimalPresentation M;
+     if o.Trim == true then P := presentation minimalPresentation M else P = presentation M;
      UE := transpose syz transpose P;
      symmetricKernel(UE,Variable => fixupw o.Variable)
      )
 
 --in the case of ideals we don't need a versal embedding; any embedding in the ring will do.
 reesIdeal(Ideal) := Ideal => o-> (J) -> (
-     symmetricKernel(mingens J, Variable => fixupw o.Variable)
+    if o.Trim == true then J' := mingens J else J' = gens J;
+     symmetricKernel(J', Variable => fixupw o.Variable)
      )
 
 -- the following method, usually faster,
 -- needs a user-provided non-zerodivisor a such that M[a^{-1}] is of linear type.
 
 reesIdeal(Module,RingElement) := Ideal => o-> (I,I0) ->(
-    I' := trim I;
+    if o.Trim == true then I' := trim I else I' = I;
     K' := if o.Jacobian == true then expectedReesIdeal I' else(
     K' = symmetricAlgebraIdeal I';
     R := ring K';
     IR := substitute(I0, R);
-    trim saturate(K',IR))
+    trim saturate(K',IR)
+    )
     )
 
 reesIdeal(Ideal, RingElement) := Ideal => o -> (I,a) -> (
-     reesIdeal(module trim I, a)
+     if o.Trim == true then I' := trim I else I' = I;
+     reesIdeal(module I', a, Trim => o.Trim)
      )
 
 reesAlgebra = method (TypicalValue=>Ring,
@@ -191,8 +207,7 @@ isLinearType(Module, RingElement):= o-> (N,a)->(
      J := ideal((vars S) * P);
      ((gens I) % J) == 0)
 
-normalCone = method(TypicalValue => Ring, 
-    	    Options => {
+normalConeOptions = {
 	  DegreeLimit => {},
 	  BasisElementLimit => infinity,
 	  PairLimit => infinity,
@@ -200,16 +215,20 @@ normalCone = method(TypicalValue => Ring,
 	  Strategy => null,
 	  Variable => "w"
 	  }
-)
-normalCone(Ideal) := o -> I -> (
+
+normalCone Ideal := Ring => normalConeOptions >> o -> I -> (
      RI := reesAlgebra(I,o);
      RI/promote(I,RI)
      )
 
-normalCone(Ideal, RingElement) := o -> (I,a) -> (
+normalCone(Ideal, RingElement) := Ring => normalConeOptions >> o  -> (I,a) -> (
      RI := reesAlgebra(I,a,o);
      RI/promote(I,RI)     
      )
+
+associatedGradedRing = method(Options => normalConeOptions)
+associatedGradedRing Ideal := Ring => o -> I -> normalCone(I, o)
+associatedGradedRing(Ideal, RingElement) := Ring => o -> (I,a) -> normalCone(I, a, o)
 
 multiplicity = method(
     	    Options => {
@@ -252,7 +271,8 @@ specialFiberIdeal=method(TypicalValue=>Ideal,
 	  MinimalGenerators => true,
 	  Strategy => null,
 	  Variable => "w",
-	  Jacobian =>false
+	  Jacobian =>false,
+	  Trim => true
 	  }
       )
 specialFiberIdeal(Ideal):= o-> I ->(
@@ -267,7 +287,7 @@ specialFiberIdeal(Module):= o->i->(
      Reesi:= reesIdeal(i, o);     
      S := ring Reesi;
      kk := ultimate(coefficientRing, S);
-     T := kk[gens S];
+     T := kk(monoid [gens S]);
      minimalpres := map(T,S);
      trim minimalpres Reesi
      )
@@ -300,7 +320,8 @@ specialFiber=method(TypicalValue=>Ring,
 	  MinimalGenerators => true,
 	  Strategy => null,
 	  Variable => "w",
-	  Jacobian => false
+	  Jacobian => false,
+	  Trim => true
 	  }
       )
 
@@ -517,7 +538,7 @@ reductionNumber (Ideal,Ideal) := (i,j) -> (
 
 whichGm = method()
 whichGm Ideal := i -> (
-     --This *probabilistic* procedure returns the largest number m for which the ideal i satsifies
+     --This *probabilistic* procedure returns the largest number m for which the ideal i satisfies
      --the condition
      --
      --G_m: i_P is generated by <= codim P elements for all P with codim P < m.
@@ -746,10 +767,7 @@ doc ///
     reesIdeal
 ///
 
-{*
-viewHelp symmetricAlgebra
-*}
-
+-- viewHelp symmetricAlgebra
 
 doc ///
   Key
@@ -806,7 +824,7 @@ doc ///
    Text
      The many ways of working with this function allows the system 
      to compute both the classic Rees algebra of an ideal over a ring 
-     (polynomial or quotient) and to compute the the Rees algebra of a 
+     (polynomial or quotient) and to compute the Rees algebra of a 
      module or ideal using a versal embedding as described in the paper 
      of Eisenbud, Huneke and Ulrich.  It also allows different ways of 
      setting up the quotient ring.
@@ -819,12 +837,15 @@ doc ///
 
 doc ///
   Key
-    Jacobian  
-    [reesAlgebra, Jacobian]    
+    Trim  
   Headline
-    Choose whether to use the Jacobian dual in the computation
+    Choose whether to trim (or find minimal generators) for the ideal or module.
   Usage
-    reesIdeal(..., Jacobian => true)
+    reesIdeal(..., Trim => true)
+  Description
+   Text
+    Note that when Trim=>true, the generators used will be the ones (and in the order) M2 likes,
+    possibly not the original ones.
   SeeAlso
    reesIdeal
    reesAlgebra
@@ -907,7 +928,7 @@ doc ///
       syzygy map of the dual of the presentation of $M$.
 
       We first give a simple example looking at the syzygy matrix of the cube of
-      the maximial ideal of a polynomial ring.
+      the maximal ideal of a polynomial ring.
    Example
       S = ZZ/101[x,y,z];
       FF=res ((ideal vars S)^3);
@@ -962,7 +983,7 @@ doc ///
       gi = map(R^2, I, matrix{{x},{y}})
       kernel gi
    Text
-      We can compose $ui, inci and gi$ with a surjection $R\to i$ to get maps
+      We can compose $ui, inci$ and $gi$ with a surjection $R\to i$ to get maps
       $u:R^1 \to R^3, inc: R^1 \to R^1$ and $g:R^1 \to R^2$ having image $i$.
    Example
       u= map(R^3,R^{-1},ui)
@@ -981,7 +1002,7 @@ doc ///
       B1=symmetricKernel inc
       B=(map(ring A, ring B1)) B1
    Text
-      Finallly, the map g1:
+      Finally, the map g1:
    Example
       C1 = symmetricKernel g
       C=(map(ring A, ring C1)) C1
@@ -1006,10 +1027,11 @@ doc ///
   Key
     reesIdeal
     (reesIdeal,Ideal)
-    (reesIdeal, Module)
+    (reesIdeal,Module)
     (reesIdeal,Ideal, RingElement)
     (reesIdeal,Module, RingElement)
     [reesIdeal,Jacobian]
+    [reesIdeal,Trim]    
   Headline
     Compute the defining ideal of the Rees Algebra
   Usage
@@ -1099,19 +1121,18 @@ doc ///
     (reesAlgebra, Module)
     (reesAlgebra,Ideal, RingElement)
     (reesAlgebra,Module, RingElement)
-    
   Headline
     Compute the defining ideal of the Rees Algebra
   Usage
-    reesAlgebra M
-    reesAlgebra(M,f)
+    A = reesAlgebra M
+    A = reesAlgebra(M,f)
   Inputs
     M:Module
       or @ofClass Ideal@ of a quotient polynomial ring $R$
     f:RingElement
       any non-zerodivisor in ideal or the first Fitting ideal of the module.  Optional
   Outputs
-    :Ring
+    A:Ring
       defining the Rees algebra of M
   Description
     Text
@@ -1121,7 +1142,7 @@ doc ///
       
       In the following example, we find the Rees Algebra of a monomial curve
       singularity.  We also demonstrate the use of @TO reesIdeal@, @TO symmetricKernel@,
-      @TO isLinearType@, @TO normalCone@, @TO associatedGradedRing@, @TO specialFiberIdeal@.
+      @TO isLinearType@, @TO (normalCone, Ideal, RingElement)@, @TO associatedGradedRing@, @TO specialFiberIdeal@.
     Example
       S = QQ[x_0..x_3]
       i = monomialCurveIdeal(S,{3,7,8})      
@@ -1236,15 +1257,18 @@ doc ///
 
 doc ///
   Key
-    normalCone
+    associatedGradedRing
+    (associatedGradedRing, Ideal)
+    (associatedGradedRing, Ideal, RingElement)
     (normalCone, Ideal)
     (normalCone, Ideal, RingElement)
-    
   Headline
     The normal cone of a subscheme
   Usage
     normalCone I
     normalCone(I,f)
+    associatedGradedRing I
+    associatedGradedRing(I,f)
   Inputs
     I:Ideal
     f:RingElement
@@ -1260,8 +1284,7 @@ doc ///
       isomorphic to $S/IS$, which is how it is computed here.
   SeeAlso
     reesAlgebra
-    associatedGradedRing
-    normalCone
+    "MultiplicitySequence::grGr"
 ///
 
 
@@ -1309,6 +1332,8 @@ doc ///
     (specialFiberIdeal, Ideal)
     (specialFiberIdeal, Module, RingElement)
     (specialFiberIdeal, Ideal, RingElement)
+    [specialFiberIdeal, Jacobian]
+    [specialFiberIdeal, Trim]
   Headline
      Special fiber of a blowup     
   Usage
@@ -1332,6 +1357,9 @@ doc ///
 
      The name derives from the fact that $Proj(T/mm*T)$ is the special fiber of
      the blowup of $Spec R$ along the subscheme defined by $I$.
+     
+     With the default Trim => true, the computation begins by computing minimal generators,
+     which may result in a change of generators of M
    Example
      R=QQ[a..h]
      M=matrix{{a,b,c,d},{e,f,g,h}}
@@ -1368,6 +1396,7 @@ doc ///
     (specialFiber, Module, RingElement)
     (specialFiber, Ideal, RingElement)
     [specialFiber, Jacobian]
+    [specialFiber, Trim]    
   Headline
      Special fiber of a blowup     
   Usage
@@ -1395,6 +1424,9 @@ doc ///
      
      The name derives from the fact that $Proj(T/mm*T)$ is the special fiber of
      the blowup of $Spec R$ along the subscheme defined by $I$.
+
+     With the default Trim => true, the computation begins by computing minimal generators,
+     which may result in a change of generators of M
    Example
      R=QQ[a..h]
      M=matrix{{a,b,c,d},{e,f,g,h}}
@@ -1476,7 +1508,7 @@ doc ///
      minimal primes P_i over K with S/I \subset{} gr_IS, that is,
      the minimal primes of the support in R/I of the normal cone of f(I).
      The multiplicity associated
-     with p_i is by definition the the multiplicities of P_i in the primary
+     with p_i is by definition the multiplicity of P_i in the primary
      decomposition of K.
      
      Distinguished subvarieties and their multiplicity
@@ -1677,7 +1709,7 @@ doc ///
       the function @TO isReduction@. It returns the smallest integer $k$ such that
       $JI^k = I^{k+1}$.
       
-      For further informaion, see the book:
+      For further information, see the book:
       Huneke, Craig; Swanson, Irena: Integral closure of ideals, rings, and modules, 
       London Mathematical Society Lecture Note Series, 336. Cambridge University Press, 
       Cambridge, 2006.
@@ -1895,6 +1927,8 @@ doc ///
     [reesIdeal, Variable]
     [reesAlgebra, Variable]
     [associatedGradedRing, Variable]
+    [(normalCone, Ideal), Variable]
+    [(normalCone, Ideal, RingElement), Variable]
     [specialFiberIdeal, Variable]
     [specialFiber, Variable]
     [distinguished, Variable]
@@ -1951,8 +1985,10 @@ doc ///
     [reesAlgebra,Strategy]
     [isLinearType,Strategy]
     [isReduction, Strategy]    	  
-    [normalCone, Strategy]    	  
-    [multiplicity, Strategy]    	  
+    [multiplicity, Strategy]
+    [associatedGradedRing, Strategy]
+    [(normalCone, Ideal), Strategy]
+    [(normalCone, Ideal, RingElement), Strategy]
     [specialFiberIdeal, Strategy]    	  
     [specialFiber, Strategy]    	  
     [analyticSpread, Strategy]    	  
@@ -1978,7 +2014,7 @@ doc ///
     reesAlgebra
     isLinearType
     isReduction
-    normalCone
+    associatedGradedRing
     multiplicity
     specialFiberIdeal
     specialFiber
@@ -1996,7 +2032,9 @@ doc ///
     [specialFiber, PairLimit]
     [specialFiberIdeal, PairLimit]
     [multiplicity, PairLimit]
-    [normalCone, PairLimit]
+    [associatedGradedRing, PairLimit]
+    [(normalCone, Ideal), PairLimit]
+    [(normalCone, Ideal, RingElement), PairLimit]
     [isReduction, PairLimit]
     [isLinearType,PairLimit]
     [reesAlgebra,PairLimit]
@@ -2015,7 +2053,7 @@ doc ///
     reesAlgebra
     isLinearType
     isReduction
-    normalCone
+    associatedGradedRing
     multiplicity
     specialFiberIdeal
     specialFiber
@@ -2033,7 +2071,9 @@ doc ///
     [specialFiber, MinimalGenerators]
     [specialFiberIdeal, MinimalGenerators]
     [multiplicity, MinimalGenerators]
-    [normalCone, MinimalGenerators]
+    [associatedGradedRing, MinimalGenerators]
+    [(normalCone, Ideal), MinimalGenerators]
+    [(normalCone, Ideal, RingElement), MinimalGenerators]
     [isReduction, MinimalGenerators]
     [isLinearType,MinimalGenerators]
     [reesAlgebra,MinimalGenerators]
@@ -2046,14 +2086,14 @@ doc ///
      Here X is of type boolean. Each of these functions involves the
      computation of a Rees algebra, which may involve a saturation step.
      This optional argument determines whether or not 
-     the output of the saturation step will be forced to have a minmimal generating set.
+     the output of the saturation step will be forced to have a minimal generating set.
      This is described in the documentation node for @TO saturate@.
    SeeAlso
     reesIdeal
     reesAlgebra
     isLinearType
     isReduction
-    normalCone
+    associatedGradedRing
     multiplicity
     specialFiberIdeal
     specialFiber
@@ -2070,7 +2110,9 @@ doc ///
     [analyticSpread, BasisElementLimit]
     [specialFiber, BasisElementLimit]
     [multiplicity, BasisElementLimit]
-    [normalCone, BasisElementLimit]
+    [associatedGradedRing, BasisElementLimit]
+    [(normalCone, Ideal), BasisElementLimit]
+    [(normalCone, Ideal, RingElement), BasisElementLimit]
     [isReduction, BasisElementLimit]
     [isLinearType,BasisElementLimit]
     [reesAlgebra,BasisElementLimit]
@@ -2090,7 +2132,7 @@ doc ///
     reesAlgebra
     isLinearType
     isReduction
-    normalCone
+    associatedGradedRing
     multiplicity
     specialFiberIdeal
     specialFiber
@@ -2106,8 +2148,10 @@ doc ///
     [distinguished,DegreeLimit]
     [analyticSpread, DegreeLimit]
     [specialFiber, DegreeLimit]
-    [normalCone, DegreeLimit]
     [multiplicity, DegreeLimit]
+    [associatedGradedRing, DegreeLimit]
+    [(normalCone, Ideal), DegreeLimit]
+    [(normalCone, Ideal, RingElement), DegreeLimit]
     [isReduction, DegreeLimit]
     [isLinearType,DegreeLimit]
     [reesAlgebra,DegreeLimit]
@@ -2129,7 +2173,7 @@ doc ///
     reesAlgebra
     isLinearType
     isReduction
-    normalCone
+    associatedGradedRing
     multiplicity
     specialFiberIdeal
     specialFiber
@@ -2163,7 +2207,7 @@ doc ///
      such that T*phi = X*psi. Under reasonable hypotheses (eg when R is a domain) the relation
      X*psi = 0 in the Rees algebra implies that the n x n minors of psi are 0. Thus these minors lie in the ideal
      defining the Rees algebra. The expectedReesIdeal is the sum of the ideals (T*phi) and the ideal of nxn minors of psi.
-     Under particularly good circumstances this sum is known to be equal to the ideal of the Rees algrebra. More generally,
+     Under particularly good circumstances this sum is known to be equal to the ideal of the Rees algebra. More generally,
      it may speed computations of @TO reesIdeal@ to start with this sum rather than with the ideal T*phi, as in the following
      example. (This can be turned off with the Jacobian=>false option.)
     
@@ -2259,16 +2303,16 @@ doc ///
      ideal to understand what's going on.
     Example
      irrelB = ideal(B_0,B_1)
-     intersection = saturate(D_0+D_1, irrelB)
-     codim intersection
-     degree intersection
+     doublePoint = saturate(D_0+D_1, irrelB)
+     codim doublePoint
+     degree doublePoint
     Text
      We can see the multiplicities of these components by comparing their degrees to the
      degrees of the reduced components
     Example
      divisors = primaryDecomposition totalTransform
      strictTransform = divisors_0
-     exeptional = divisors_1
+     exceptional = divisors_1
      divisors/(i-> degree i/degree radical i)
     Text
      That is, the exceptional component occurs with multiplicity 2 (in general we'd 
@@ -2593,7 +2637,7 @@ TEST///
 kk = ZZ/101
 S = kk[x,y]
 I = ideal"x2y";J=ideal"xy2"
-assert(intersectInP(I,J) == {{2, ideal x}, {5, ideal (y, x)}, {2, ideal y}})
+assert(intersectInP(I,J) == {{5, ideal (y, x)}, {2, ideal y}, {2, ideal x}})
 I = ideal"y-x2";J=ideal y
 assert(intersectInP(I,J) == {{2, ideal (y, x)}})
 ///
@@ -2618,209 +2662,3 @@ viewHelp ReesAlgebra
 
 ----
 
---minimum value of (ell,r):(g+n-1), ceiling(n-1)(m-1)/m
---here the estimate of r comes from the non-min reduction
---(a)(x)^[n].
-
---actual values: g = 2, m= 2 starting with n=4 it looks like ceiling(n/m)
---The following gives (ell,r) for n=2..6
---the case n = 6 took 524 seconds.
-     +------+
-o8 = |(3, 1)|
-     +------+
-     |(4, 2)|
-     +------+
-     |(5, 3)|
-     +------+
-     |(6, 3)|
-     +------+
-     |(7, 4)|
-     +------+
---actual values: g = 3, m = 2, n = 3,
-(n, ell, r, rsmall, rsmall theoretical)
-(3, 5, 2, 1, 1)
-     -- used 7.10124 seconds
-(4, 6, 3, 2, 2)
-
-
---could also be 1 more than rsmall.
---the case n = 6 took 524 seconds.
-
---elapsedTime (K = codim(j:i))
---AX = (ideal apply(g, i->a_i))* ideal apply(n,i->x_i^m)
---elapsedTime reductionNumber(i,AX)
-
-///
- 
-{* slightly slower
-reductionNumber (Ideal,Ideal) := (i,j) -> (
-     I:=i; -- will be a power of i
-     M:= ideal vars ring i; -- we're pretending to be in a local ring
-     rN:=0;
-     if isHomogeneous j then (
-     	  while not ((gens I)%j)==0 do (
-	       I = trim (i*I);
-	       j=  trim (i*j);
-     	       rN =rN+1))
-     else(
-     	  while not ((gens I)%(j+M*I))==0 do (
-	       I = trim(i*I);
-	       j= trim(i*j);
-     	       rN =rN+1));
-     rN)
-*}
-
-{* much slower
-reductionNumber (Ideal,Ideal,ZZ) := (i,j,t) -> (
-    --t is any integer, signals a different method
-     d := max flatten (i_*/degree);
-     I := i; -- will be a power of i
-     M := ideal vars ring i; -- we're pretending to be in a local ring
-     rN := 0;
-     J := j;
---      while not (gens I)% gb(gens J,DegreeLimit => (rN)*d) ==0 
-      while not (gens I)% gb(gens J) == 0
-            do (
-       I = trim i*I;
-       J = i*J;
-       rN =rN+1);
-     rN)
-*}
-{*
---The following seems to  be much slower!
-reductionNumber (Ideal, Ideal, String) := (i,j,s) -> (
-     Ifib := specialFiber(I);
-     Pfib := (ring Ifib); -- ambient ring of the fiber
-     n := numgens Pfib;
-     kk := coefficientRing Pfib;
-     M := sub(gens J // gens I, kk);
-     M = promote(M, Pfib);
-     L := (vars Pfib)*M; 
-     regularity (Pfib^1/ideal(leadTerm(Ifib+ideal L)))
-	  )
-*}
-
----------------------------
-
---jetsam
-doc ///
-  Key
-    associatedGradedRing
-    (associatedGradedRing, Ideal)
-    (associatedGradedRing, Ideal, RingElement)
-    
-  Headline
-    The associated graded ring of a ring with respect to powers of an ideal
-  Usage
-    associatedGradedRing I
-    associatedGradedRing(I,f)
-  Inputs
-    I:Ideal
-    f:RingElement
-      optional argument, if given it should be a non-zero divisor in the ideal I
-  Outputs
-    :Ring
-      the associated graded ring $R[It] \otimes R/I$
-  Description
-   Text
-    associatedGradedRing is a synonym for @TO normalCone@.
-  SeeAlso
-    reesAlgebra
-    normalCone
-    "tangentCone"
-///
-
-    normalCone(...,Variable=>w)
-        [normalCone, Variable]
-	
-	
------------------
-This 
-
-    doc ///
-       Key
-	symmetricAlgebraIdeal
-	(symmetricAlgebraIdeal, Ideal)    
-	(symmetricAlgebraIdeal, Module)
-	[symmetricAlgebraIdeal,Constants]
-	[symmetricAlgebraIdeal,DegreeLift]
-	[symmetricAlgebraIdeal,DegreeMap]
-	[symmetricAlgebraIdeal,DegreeRank]
-	[symmetricAlgebraIdeal,Degrees]
-	[symmetricAlgebraIdeal,Global]
-	[symmetricAlgebraIdeal,Heft]
-	[symmetricAlgebraIdeal,Inverses]
-	[symmetricAlgebraIdeal,Join]
-	[symmetricAlgebraIdeal,Local]
-	[symmetricAlgebraIdeal,MonomialOrder]
-	[symmetricAlgebraIdeal,MonomialSize]
-	[symmetricAlgebraIdeal,SkewCommutative]
-	[symmetricAlgebraIdeal,VariableBaseName]
-	[symmetricAlgebraIdeal,Variables]
-	[symmetricAlgebraIdeal,Weights]
-	[symmetricAlgebraIdeal,WeylAlgebra]
-       Headline
-	Ideal of the symmetric algebra of an ideal or module
-       Usage
-	I = symmetricAlgebra J
-       Inputs
-	I:Ideal
-	I: Module
-       Outputs
-	J:Ideal
-
-results in
-
-    Synopsis
-
-    Usage:
-	I = symmetricAlgebra J
-    Inputs:
-	I, an ideal
-	I, a module
-    Optional inputs:
-	Constants => ..., -- Ideal of the symmetric algebra of an ideal or module
-	DegreeLift => ..., -- Ideal of the symmetric algebra of an ideal or module
-	DegreeMap => ..., -- Ideal of the symmetric algebra of an ideal or module
-	DegreeRank => ..., -- Ideal of the symmetric algebra of an ideal or module
-	Degrees => ..., -- Ideal of the symmetric algebra of an ideal or module
-	Global => ..., -- Ideal of the symmetric algebra of an ideal or module
-	Heft => ..., -- Ideal of the symmetric algebra of an ideal or module
-	Inverses => ..., -- Ideal of the symmetric algebra of an ideal or module
-	Join => ..., -- Ideal of the symmetric algebra of an ideal or module
-	Local => ..., -- Ideal of the symmetric algebra of an ideal or module
-	MonomialOrder => ..., -- Ideal of the symmetric algebra of an ideal or module
-	MonomialSize => ..., -- Ideal of the symmetric algebra of an ideal or module
-	SkewCommutative => ..., -- Ideal of the symmetric algebra of an ideal or module
-	VariableBaseName => ..., -- Ideal of the symmetric algebra of an ideal or module
-	Variables => ..., -- Ideal of the symmetric algebra of an ideal or module
-	Weights => ..., -- Ideal of the symmetric algebra of an ideal or module
-	WeylAlgebra => ..., -- Ideal of the symmetric algebra of an ideal or module
-    Outputs:
-	J, an ideal
-
-, which looks bad.  By contrast, look at
-
-  https://faculty.math.illinois.edu/Macaulay2/doc/Macaulay2-1.10/share/doc/Macaulay2/Macaulay2Doc/html/_install__Package.html
-
-, which arise from this code:
-
-  https://github.com/Macaulay2/M2/blob/master/M2/Macaulay2/packages/Macaulay2Doc/functions/installPackage-doc.m2#L7
-
-Perhaps you could do something similar.
-
-	
-==================
-Delete these lines:
-
-    	DebuggingMode => false,
-	Reload => true  
-=================
-Don't put comments into strings:
-
-	///
-	restart
-	loadPackage("ReesAlgebra", Reload=>true)
-
-Use -* ... *- block comment syntax instead.  Also, change the old {* ... *}
-to the new syntax, so emacs will highlight it properly.

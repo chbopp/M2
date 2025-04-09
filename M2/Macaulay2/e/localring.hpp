@@ -63,9 +63,9 @@ class LocalRing : public Ring
                        const ring_elem f,
                        ring_elem &result) const;
 
-  virtual bool from_rational(mpq_ptr n, ring_elem &result) const;
+  virtual bool from_rational(mpq_srcptr n, ring_elem &result) const;
   virtual ring_elem from_long(long n) const;
-  virtual ring_elem from_int(mpz_ptr n) const;
+  virtual ring_elem from_int(mpz_srcptr n) const;
   virtual ring_elem var(int v) const;
 
   virtual int index_of_var(const ring_elem a) const;
@@ -74,17 +74,18 @@ class LocalRing : public Ring
   void lower_content(ring_elem &c, const ring_elem g) const;
 
   virtual bool is_homogeneous(const ring_elem f) const;
-  virtual void degree(const ring_elem f, int *d) const;
-  virtual bool multi_degree(const ring_elem f, int *d) const;
+  virtual bool multi_degree(const ring_elem f, monomial d) const;
   virtual void degree_weights(const ring_elem f,
-                              M2_arrayint wts,
+                              const std::vector<int> &wts,
                               int &lo,
                               int &hi) const;
   virtual ring_elem homogenize(const ring_elem f,
                                int v,
                                int deg,
-                               M2_arrayint wts) const;
-  virtual ring_elem homogenize(const ring_elem f, int v, M2_arrayint wts) const;
+                               const std::vector<int> &wts) const;
+  virtual ring_elem homogenize(const ring_elem f,
+                               int v,
+                               const std::vector<int> &wts) const;
 
   virtual ring_elem copy(const ring_elem f) const;
   virtual void remove(ring_elem &f) const;
@@ -93,7 +94,7 @@ class LocalRing : public Ring
   virtual ring_elem add(const ring_elem f, const ring_elem g) const;
   virtual ring_elem subtract(const ring_elem f, const ring_elem g) const;
   virtual ring_elem mult(const ring_elem f, const ring_elem g) const;
-  virtual ring_elem power(const ring_elem f, mpz_t n) const;
+  virtual ring_elem power(const ring_elem f, mpz_srcptr n) const;
   virtual ring_elem power(const ring_elem f, int n) const;
   virtual ring_elem invert(const ring_elem f) const;
   virtual ring_elem divide(const ring_elem f, const ring_elem g) const;
@@ -111,9 +112,9 @@ class LocalRing : public Ring
 
   virtual int n_fraction_vars() const;  // FIXME
   virtual int n_terms(const ring_elem f) const;
-  virtual ring_elem term(const ring_elem a, const int *m) const;
+  virtual ring_elem term(const ring_elem a, const_monomial m) const;
   virtual ring_elem lead_coeff(const ring_elem f) const;
-  virtual ring_elem get_coeff(const ring_elem f, const int *m) const;
+  virtual ring_elem get_coeff(const ring_elem f, const_monomial m) const;
   virtual ring_elem get_terms(int nvars0,
                               const ring_elem f,
                               int lo,

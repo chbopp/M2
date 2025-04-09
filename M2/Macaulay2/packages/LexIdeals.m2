@@ -8,7 +8,8 @@ newPackage(
 		     Email => "chris@math.okstate.edu", 
 		     HomePage => "http://www.math.okstate.edu/~chris"}
 	},
-	Headline => "A Macaulay 2 package for manipulating lexicographic-type monomial ideals",
+	Headline => "lexicographic-type monomial ideals",
+	Keywords => {"Commutative Algebra"},
 	DebuggingMode => false
 	)
 
@@ -976,7 +977,7 @@ doc///
 	       
 	       {\tt m_1(R/I) ... m_c(R/I) / c! <= e(R/I) <= M_1(R/I) ... M_c(R/I) / c!},
 	  
-	       where the ellipses signfiy that we are taking the product of the shifts. This conjecture was proven in 2008 work 
+	       where the ellipses signify that we are taking the product of the shifts. This conjecture was proven in 2008 work 
 	       of Eisenbud-Schreyer and Boij-Soderberg using decompositions of Betti diagrams as positive linear combinations of 
 	       Betti diagrams of modules with pure resolutions.
 

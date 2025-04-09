@@ -3,7 +3,6 @@
 
 #ifdef HAVE_FPLLL
 #include <stddef.h>
-#include <gmp.h>
 #include <fplll.h>
 #endif
 
@@ -65,6 +64,7 @@ bool fp_LLL(MutableMatrix *M, MutableMatrix *U, int strategy)
         ring_elem b = globalZZ->from_int(a);
         M->set_entry(j, i, b);
       }
+  mpz_clear(a);
   return true;
 #endif
 }

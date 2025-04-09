@@ -9,6 +9,13 @@
 #include "mat.hpp"
 #include "monideal.hpp"
 
+void showint(mpz_srcptr a)
+{
+  char s[1000];
+  mpz_get_str(s, 10, a);
+  fprintf(stderr, " %s ", s);
+}
+
 void dintarray(M2_arrayint a)
 {
   buffer o;
@@ -19,6 +26,26 @@ void dintarray(M2_arrayint a)
       o << a->array[i];
     }
   o << "]";
+  emit(o.str());
+}
+
+template <typename T>
+void dvector(gc_vector<T>& a)
+{
+  buffer o;
+  o << '[';
+  for (auto x : a) o << x << ' ';
+  o << ']';
+  emit(o.str());
+}
+
+template <typename T>
+void dvector(std::vector<T>& a)
+{
+  buffer o;
+  o << '[';
+  for (auto x : a) o << x << ' ';
+  o << ']';
   emit(o.str());
 }
 
@@ -68,7 +95,7 @@ void dvec(const Ring *R, const vec v)
 void dgbvec(const GBRing *R, gbvector *v)
 {
   buffer o;
-  const FreeModule *F = 0;
+  const FreeModule *F = nullptr;
   R->gbvector_text_out(o, F, v);
   emit(o.str());
 }

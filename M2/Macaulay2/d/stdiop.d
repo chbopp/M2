@@ -44,7 +44,7 @@ shorten(s:string):string := (				    -- purely textual
 	  );
      );
 isAbsolutePath(s:string):bool := (                         			    -- purely textual
-     -- eventually make this happen only in MSDOS
+     -- eventually make this happen only in MS-DOS
      length(s) >= 1 && s.0 == '/' ||
      length(s) >= 3 && s.1 == ':' && s.2 == '/' ||
      s === "stdio"
@@ -64,6 +64,7 @@ absoluteFilename(filename:string):string := (
      shorten(filename)
      );
 relativize(cwd:string,filename:string):string := (	    -- purely textual
+     if filename === "stdio" then return filename;
      if length(cwd) == 0 || cwd.(length(cwd)-1) != '/' then cwd = cwd + '/';
      i := 0;
      while i < length(cwd) && i < length(filename) && cwd.i == filename.i do i = i+1;
@@ -110,28 +111,31 @@ export verifyMinimizeFilename(filename:string):string := (
 	       )));
 export tostring(w:Position) : string := (
      if w == dummyPosition 
-     then "{*dummy position*}"
-     else errfmt(verifyMinimizeFilename(w.filename),int(w.line),int(w.column + 1),int(w.loadDepth)));
+     then "-*dummy position*-"
+     else (
+	 filename := verifyMinimizeFilename(w.filename);
+	 foreach c in filename do (
+	     if c == ' ' then (
+		 filename = "\"" + filename + "\"";
+		 break));
+	 errfmt(filename, int(w.lineF), int(w.columnF), int(w.loadDepth))));
 export (o:file) << (w:Position) : file := o << tostring(w);
 export (o:BasicFile) << (w:Position) : BasicFile := o << tostring(w);
 threadLocal export SuppressErrors := false;
 cleanscreen():void := (
-     flush(stdIO);
-     if stdIO.outfd == stdError.outfd && !atEndOfLine(stdIO) || test(interruptedFlag) then (
-	  stdIO << '\n';
-     	  flush(stdIO);
-	  )
-     );
+    stdIO << flush;
+    if stdIO.outfd == stdError.outfd && !atEndOfLine(stdIO) || test(interruptedFlag)
+    then stdIO << newline << flush;);
 
 printMessage(position:Position,message:string):void := (
      if !SuppressErrors then (
      	  cleanscreen();
-     	  stderr << position;
-	  if recursionDepth > 0 then stderr << "[" << recursionDepth << "]:";
+	  stdError << position;
+	  if recursionDepth > 0 then stdError << "[" << recursionDepth << "]:";
      	  -- gettid() is not there in Solaris
 	  -- tid := gettid();
-	  -- if tid != -1 && tid != getpid() then stderr << "<" << gettid() << ">:";
-	  stderr << " " << message << endl;
+	  -- if tid != -1 && tid != getpid() then stdError << "<" << gettid() << ">:";
+	  stdError << " " << message << endl;
 	  );
      );
 export printErrorMessage(position:Position,message:string):void := (
@@ -139,13 +143,23 @@ export printErrorMessage(position:Position,message:string):void := (
      );
 export printWarningMessage(position:Position,message:string):void := printMessage(position,"warning: "+message);
 export printErrorMessage(filename:string,line:ushort,column:ushort,message:string):void := (
-     printErrorMessage(Position(filename,line,column,ushort(0)), message);
+     printErrorMessage(Position(filename,line,column,line,column,line,column,ushort(0)), message);
      );
 export (o:file) << (p:(null or Position)) : file := when p is null do o is w:Position do o << w;
 export (o:BasicFile) << (p:(null or Position)) : BasicFile := when p is null do o is w:Position do o << w;
-export copy(p:Position):Position := Position(p.filename, p.line, p.column, loadDepth);
-export position(file:PosFile):Position := Position(file.filename,file.line,file.column,loadDepth);
-export dummyPosFile := PosFile(dummyfile,0,"{*dummy file name*}",ushort(0),ushort(0));
+export copy(p:Position):Position := Position(
+    p.filename,
+    p.lineL, p.columnL,
+    p.lineR, p.columnR,
+    p.lineF, p.columnF,
+    loadDepth);
+export position(file:PosFile):Position := Position(
+    file.filename,
+    file.line, file.column,
+    file.line, file.column,
+    file.line, file.column,
+    loadDepth);
+export dummyPosFile := PosFile(dummyfile,0,"-*dummy file name*-",ushort(0),ushort(0));
 export fileError(f:PosFile):bool := fileError(f.file);
 export clearFileError(f:PosFile):void := clearFileError(f.file);
 export fileErrorMessage(f:PosFile):string := fileErrorMessage(f.file);
@@ -194,7 +208,7 @@ export getc(o:PosFile):int := (
 	  o.column = o.column + 1;
 	  );
      c );
-export flush(o:PosFile):void := flushinput(o.file);
+export flushInput(o:PosFile):void := flushinput(o.file);
 
 -- Local Variables:
 -- compile-command: "echo \"make: Entering directory \\`$M2BUILDDIR/Macaulay2/d'\" && make -C $M2BUILDDIR/Macaulay2/d stdiop.o "

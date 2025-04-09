@@ -1,5 +1,7 @@
 --		Copyright 2005, 2008 by Daniel R. Grayson and Michael E. Stillman
 
+needs "matrix.m2"
+
 MutableMatrix = new Type of HashTable
 MutableMatrix.synonym = "mutable matrix"
 raw MutableMatrix := m -> m.RawMutableMatrix
@@ -11,10 +13,11 @@ entries MutableMatrix := m -> (
      applyTable(entries raw m, r -> promote(r,R)))
 toString MutableMatrix := m -> "mutableMatrix " | toString entries m
 precision MutableMatrix := precision @@ ring
-net MutableMatrix := m -> (
-     m = raw m;
-     if m == 0 then return "0";
-     stack toSequence apply(lines toString m, x -> concatenate("| ",x,"|")))
+expression MutableMatrix := m -> MatrixExpression append(applyTable(entries m, expression), symbol MutableMatrix => true)
+texMath MutableMatrix := m -> texMath expression m
+net MutableMatrix := m -> net expression m
+toExternalString MutableMatrix := lookup(toExternalString, MutableHashTable)
+
 map(Ring,RawMutableMatrix) := opts -> (R,m) -> (
      new MutableMatrix from {
 	  symbol Ring => R,
@@ -89,15 +92,14 @@ promote(MutableMatrix,Number) := Matrix => (f,S) -> (
 --------------------------------
 -- submatrices -----------------
 --------------------------------
-listZ := v -> ( if not all(v,i -> instance(i, ZZ)) then error "expected list of integers"; v )
 MutableMatrix _ List := Matrix => (f,v) -> submatrix(f,listZ splice v)	-- get some columns
 MutableMatrix ^ List := Matrix => (f,v) -> submatrix(f,listZ splice v,) -- get some rows
 submatrix(MutableMatrix,VisibleList,VisibleList) := (m,rows,cols) -> map(ring m,rawSubmatrix(raw m, listZ toList splice rows, listZ toList splice cols))
 submatrix(MutableMatrix,VisibleList            ) := (m,cols     ) -> map(ring m,rawSubmatrix(raw m, listZ toList splice cols))
 submatrix(MutableMatrix,Nothing    ,VisibleList) := (m,null,cols) -> submatrix(m,cols)
-submatrix(MutableMatrix,VisibleList,Nothing    ) := (m,rows,cols) -> (
-     rows = splice rows; 
-     map((ring m, rawSubmatrix(raw m, listZ toList rows, 0 .. numColumns m - 1))))
+submatrix(MutableMatrix, VisibleList, Nothing)     := (m, rows, null) -> map(ring m, rawSubmatrix(raw m, listZZ rows, 0 .. numColumns m - 1))
+submatrix(MutableMatrix, Nothing,     Nothing)     := (m, null, null) -> m
+
 --------------------------------
 numRows(RawMutableMatrix) := (m) -> rawNumberOfRows m
 numRows(MutableMatrix) := (m) -> rawNumberOfRows raw m
@@ -182,6 +184,8 @@ randomMutableMatrix(ZZ,ZZ,RR,ZZ) := options -> (n,m,percentagezero,maxentry) -> 
 
 LUdecomposition = method()
 LUdecomposition MutableMatrix := (A) -> (
+     if not isField ring A then
+       error("LU not implemented over ring " | toString ring A);
      nrows := rawNumberOfRows raw A;
      L := mutableMatrix(ring A,0,0,Dense=>true);
      U := mutableMatrix(ring A,0,0,Dense=>true);
@@ -191,10 +195,15 @@ LUdecomposition Matrix := (A) -> (
      (p,L,U) := LUdecomposition mutableMatrix A;
      (p, matrix L,matrix U))
 
-solve = method(Options => { ClosestFit => false, MaximalRank => false, Precision=>0, Invertible=>false })
+solve = method(Options => { ClosestFit => false,
+	                    MaximalRank => false,
+			    Precision=>0,
+			    Invertible=>false })
 
 solve(MutableMatrix,MutableMatrix) := opts -> (A,b) -> (
      R := ring A;
+     if not isField R then
+       error("solve not implemented over ring " | toString ring A);
      if opts.ClosestFit then (
          if (opts#Precision !=0) then (
 		     A=mutableMatrix(promote(matrix(A), CC_(opts#Precision)));
@@ -213,13 +222,21 @@ solve(MutableMatrix,MutableMatrix) := opts -> (A,b) -> (
      )
 
 solve(Matrix,Matrix) := opts -> (A,b) -> (
-    if not isBasicMatrix A or not isBasicMatrix b then error "expected matrices between free modules";
+     if not isBasicMatrix A or not isBasicMatrix b then
+       error "expected matrices between free modules";
      if ultimate(coefficientRing, ring A) === ZZ then (
          return (b // A);
         );
-     matrix solve(mutableMatrix(A,Dense=>true),
+     ans := solve(mutableMatrix(A,Dense=>true),
                   mutableMatrix(b,Dense=>true),
-		  opts))
+		  opts);
+     if ans === null then null else matrix ans
+     )
+
+solve(Matrix,Vector) := opts -> (A,b) -> (
+    ans := solve(A,b#0,opts);
+    if ans === null then null else vector ans
+    )
 
 eigenvalues = method(Options => {Hermitian => false})
 eigenvalues(MutableMatrix) := o -> (A) -> (
@@ -248,10 +265,10 @@ eigenvectors(Matrix) := o -> (A) -> (
      (e,v) := eigenvectors(mutableMatrix(numeric A,Dense=>true),o);
      (e, matrix v))
 
-SVD = method(Options=>{DivideConquer=>false})
+SVD = method(Options=>{DivideConquer=>true})
 SVD MutableMatrix := o -> A -> (
      k := ring A;
-     if not instance(k,InexactField) then error "eigenvalues requires matrices over RR or CC";
+     if not instance(k,InexactField) then error "SVD requires matrices over RR or CC";
      Sigma := mutableMatrix(RR_(k.precision),0,0,Dense=>true);
      U := if instance(k,RealField) then mutableMatrix(RR_(k.precision),0,0) else mutableMatrix(CC_(k.precision),0,0,Dense=>true);
      VT := if instance(k,RealField) then mutableMatrix(RR_(k.precision),0,0) else mutableMatrix(CC_(k.precision),0,0,Dense=>true);
@@ -259,7 +276,7 @@ SVD MutableMatrix := o -> A -> (
      (Sigma,U,VT))
 SVD Matrix := o -> A -> (
      k := ring A;
-     if not instance(k,InexactField) then error "eigenvalues requires matrices over RR or CC";
+     if not instance(k,InexactField) then error "SVD requires matrices over RR or CC";
      A = mutableMatrix(A,Dense=>true);
      (Sigma,U,VT) := SVD(A,o);
      (VerticalList flatten entries matrix Sigma,matrix U,matrix VT))
@@ -267,48 +284,62 @@ SVD Matrix := o -> A -> (
 QRDecomposition = method()
 QRDecomposition MutableMatrix := A -> (
      k := ring A;
-     if k =!= RR_53 then error "currently, QRDecomposition is only defined for matrices over RR_53";
+     -- if k =!= RR_53 then error "currently, QRDecomposition is only defined for matrices over RR_53";
      Q := mutableMatrix(k,0,0,Dense=>true);
      R := mutableMatrix(k,0,0,Dense=>true);
      rawQR(raw A, raw Q, raw R, true -* ReturnQR was a bad option name *- );
      (Q,R))
 QRDecomposition Matrix := A -> (
      k := ring A;
-     if k =!= RR_53 then error "currently, QRDecomposition is only defined for matrices over RR_53";
+     -- if k =!= RR_53 then error "currently, QRDecomposition is only defined for matrices over RR_53";
      A = mutableMatrix(A,Dense=>true);
      (Q,R) := QRDecomposition A;
      (matrix Q,matrix R))
 
-rank MutableMatrix := (M) -> rawLinAlgRank raw M
+rank MutableMatrix := (M) -> (
+    if isField ring M then
+      rawLinAlgRank raw M
+    else
+      rank matrix M
+    )
 
-determinant MutableMatrix := opts -> (M) -> promote(rawLinAlgDeterminant raw M, ring M)
+determinant = method(Options => { Strategy => null })
+determinant MutableMatrix := opts -> (M) -> (
+    if numRows M =!= numColumns M then error "expected a square matrix";
+    if isField ring M then
+      promote(rawLinAlgDeterminant raw M, ring M)
+    else
+      determinant matrix M
+    )
 
-inverse MutableMatrix := (A) -> (
-     R := ring A;
-     if numRows A =!= numColumns A then error "expected square matrix";
-     map(R,rawLinAlgInverse raw A)
+inverse MutableMatrix := (M) -> (
+     if numRows M =!= numColumns M then error "expected square matrix";
+     if isField ring M then
+       map(ring M, rawLinAlgInverse raw M)
+     else
+       mutableMatrix inverse matrix M
      )
 
 nullSpace = method()
 nullSpace(MutableMatrix) := (M) -> map(ring M, rawLinAlgNullSpace raw M)
 
-MutableMatrix ^ ZZ := (A, r) -> (
-     if r == 0 then 
-       return mutableIdentity(ring A, numRows A);
-     if r < 0 then (
-	  r = -r;
-	  A = inverse A;
-	  );
-     result := A;
-     if r > 1 then for i from 2 to r do result = result * A;
-     result     
-     )
+MutableMatrix#1 = A -> (
+    if numColumns A === numRows A then mutableIdentity(ring A, numRows A)
+    else error "expected source and target to agree")
+
+MutableMatrix ^ ZZ := MutableMatrix => BinaryPowerMethod
 
 rowRankProfile = method()
 rowRankProfile MutableMatrix := (A) -> rawLinAlgRankProfile(raw A, true)
 
 columnRankProfile = method()
 columnRankProfile MutableMatrix := (A) -> rawLinAlgRankProfile(raw A, false)
+
+reducedRowEchelonForm = method()
+reducedRowEchelonForm Matrix := (M) -> (
+    matrix reducedRowEchelonForm(mutableMatrix M)
+    )
+reducedRowEchelonForm MutableMatrix := (M) -> map(ring M, rawLinAlgRREF raw M)
      
 -- Local Variables:
 -- compile-command: "make -C $M2BUILDDIR/Macaulay2/m2 "

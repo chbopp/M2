@@ -19,11 +19,26 @@
 //   [polyring,skew,weyl,solvable]
 //   quotient ideal
 
-#include "ring.hpp"
-#include "skew.hpp"
-// #include "ntuple.hpp"
-#include "coeffrings.hpp"
+#include <M2/math-include.h>
+#include "engine-includes.hpp"
+
 #include <iostream>
+#include <string>
+
+#include "buffer.hpp"
+#include "monoid.hpp"
+#include "newdelete.hpp"
+#include "ringelem.hpp"
+#include "skew.hpp"
+#include "style.hpp"
+
+class CoefficientRingZZp;
+class FreeModule;
+class Ring;
+class SolvableAlgebra;
+class WeylAlgebra;
+class gbvectorHeap;
+class stash;
 
 struct gbvector
 {
@@ -39,10 +54,7 @@ struct POLY
   gbvector *fsyz;
 };
 
-class TermIdeal;
 typedef int *monomial;
-
-class gbvectorHeap;
 
 class GBRing : public our_new_delete
 {
@@ -127,7 +139,7 @@ class GBRing : public our_new_delete
 
   void divide_coeff_exact_to_ZZ(gbvector *f, gmp_ZZ u) const;
 
-  void lower_content_ZZ(gbvector *f, gmp_ZZ content) const;
+  void lower_content_ZZ(gbvector *f, mpz_ptr content) const;
 
   void gbvector_remove_content_ZZ(gbvector *f,
                                   gbvector *fsyz,
@@ -179,13 +191,13 @@ class GBRing : public our_new_delete
   // exponents support //
   //////////////////////
 
-  exponents exponents_make();
+  exponents_t exponents_make();
 
-  void exponents_delete(exponents e);
+  void exponents_delete(exponents_t e);
 
   size_t exponent_byte_size() const { return exp_size; }
   // use ALLOCATE_EXPONENTS(R->exponent_byte_size())
-  // to allocate on the stack an unitialized exponent vector (#ints = nvars+2)
+  // to allocate on the stack an uninitialized exponent vector (#ints = nvars+2)
   // it will be deallocated at the end of that function
 
   //////////////////////
@@ -217,13 +229,13 @@ class GBRing : public our_new_delete
   // Returns coeff*exp*e_sub_i in F, where exp is an exponent vector.
   // If comp==0, F is never considered (so it can be NULL)
 
-  gbvector *gbvector_zero() const { return 0; }
+  gbvector *gbvector_zero() const { return nullptr; }
   void gbvector_sort(const FreeModule *F,
                      gbvector *&f);  // TO BE USED CAREFULLY: gbvector's should
   // mostly be kept in monomial order.  This is here when the construction
   // doesn't satisfy this property.
 
-  bool gbvector_is_zero(const gbvector *f) const { return f == 0; }
+  bool gbvector_is_zero(const gbvector *f) const { return f == nullptr; }
   bool gbvector_is_equal(const gbvector *f, const gbvector *g) const;
   // f,g can be both be in F, or both in Fsyz
 
@@ -410,7 +422,7 @@ class GBRing : public our_new_delete
       const FreeModule *F,
       const FreeModule *Fsyz,
       const gbvector *fcurrent_lead,
-      const int *exponents,  // exponents of fcurrent_lead
+      const_exponents exp,  // exponents of fcurrent_lead
       gbvector *flead,
       gbvectorHeap &f,
       gbvectorHeap &fsyz,
@@ -421,7 +433,7 @@ class GBRing : public our_new_delete
       const FreeModule *F,
       const FreeModule *Fsyz,
       const gbvector *fcurrent_lead,
-      const int *exponents,  // exponents of fcurrent_lead
+      const_exponents exp,  // exponents of fcurrent_lead
       gbvector *flead,
       gbvectorHeap &f,
       gbvectorHeap &fsyz,

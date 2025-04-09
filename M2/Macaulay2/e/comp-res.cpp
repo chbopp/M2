@@ -6,7 +6,8 @@
 #include "res-a0.hpp"
 #include "res-a2.hpp"
 #include "finalize.hpp"
-#include "f4/res-f4-computation.hpp"
+#include "schreyer-resolution/res-f4-computation.hpp"
+#include "NCResolutions/nc-res-computation.hpp"
 
 #include <iostream>
 
@@ -19,7 +20,9 @@ ResolutionComputation *ResolutionComputation::choose_res(
     M2_bool use_max_slanted_degree,
     int max_slanted_degree,
     int algorithm,
-    int strategy)
+    int strategy,
+    int numThreads,  // only used for algorithms supporting parallelism.  0 means use TBB default.
+    M2_bool parallelizeByDegree) // only used for algorithms supporting parallelism.  0 means use TBB default.
 {
   // The following modification is because some algorithms do not work if
   // max_level is 0.
@@ -27,29 +30,42 @@ ResolutionComputation *ResolutionComputation::choose_res(
   if (max_level <= 0) max_level = 1;
 
   const Ring *R = m->get_ring();
-  ResolutionComputation *C = 0;
+  ResolutionComputation *C = nullptr;
   int origsyz;
   // First, we need to check that m is homogeneous, and that
   // the heft values of the variables are all positive.
   // All of these algorithms also assume that R is a polynomial ring.
 
+  const M2FreeAlgebraOrQuotient *NCP = R->cast_to_M2FreeAlgebraOrQuotient();
+  if (NCP != nullptr)
+    {
+      if (M2_gbTrace > 0) emit_line("NC resolution");
+      C = createNCRes(m, max_level, strategy);
+      return C;
+    }
   const PolynomialRing *P = R->cast_to_PolynomialRing();
-  if (P == 0)
+  if (P == nullptr)
     {
       ERROR("engine resolution strategies all require a polynomial base ring");
-      return 0;
+      return nullptr;
+    }
+  const Ring* K = P->getCoefficientRing();
+  if (K->get_precision() != 0)
+    {
+      ERROR("free resolutions over polynomial rings with RR or CC coefficients not yet implemented");
+      return nullptr;
     }
   if (!P->getMonoid()->primary_degrees_of_vars_positive())
     {
       ERROR(
           "engine resolution strategies all require a Heft vector which is "
           "positive for all variables");
-      return 0;
+      return nullptr;
     }
-  if (!m->is_homogeneous())
+  if (algorithm < 4 and !m->is_homogeneous())
     {
       ERROR("engine resolution strategies require a homogeneous module");
-      return 0;
+      return nullptr;
     }
 
   switch (algorithm)
@@ -60,14 +76,14 @@ ResolutionComputation *ResolutionComputation::choose_res(
             ERROR(
                 "resolution Strategy=>1 cannot resolve a cokernel with a given "
                 "presentation: use Strategy=>2 or Strategy=>3 instead");
-            return 0;
+            return nullptr;
           }
         if (!R->is_commutative_ring())
           {
             ERROR(
                 "use resolution Strategy=>2 or Strategy=>3 for non commutative "
                 "polynomial rings");
-            return 0;
+            return nullptr;
           }
         if (M2_gbTrace > 0) emit_line("resolution Strategy=>1");
         C = new res_comp(m, max_level, strategy);
@@ -78,14 +94,14 @@ ResolutionComputation *ResolutionComputation::choose_res(
             ERROR(
                 "resolution Strategy=>0 cannot resolve a cokernel with a given "
                 "presentation: use Strategy=>2 or Strategy=>3 instead");
-            return 0;
+            return nullptr;
           }
         if (!R->is_commutative_ring())
           {
             ERROR(
                 "use resolution Strategy=>2 or Strategy=>3 for non commutative "
                 "polynomial rings");
-            return 0;
+            return nullptr;
           }
         if (M2_gbTrace > 0) emit_line("resolution Strategy=>0");
         C = new res2_comp(
@@ -103,29 +119,30 @@ ResolutionComputation *ResolutionComputation::choose_res(
             m, max_level + 1, origsyz, strategy | STRATEGY_USE_HILB);
         break;
       case 4:
+      case 5:
         if (!resolve_cokernel)
           {
             ERROR(
                 "resolution Strategy=>4 cannot resolve a cokernel with a given "
                 "presentation: use Strategy=>2 or Strategy=>3 instead");
-            return 0;
+            return nullptr;
           }
         if (!P->is_skew_commutative() and !R->is_commutative_ring())
           {
             ERROR(
                 "use resolution Strategy=>2 or Strategy=>3 for non commutative "
                 "polynomial rings");
-            return 0;
+            return nullptr;
           }
         if (M2_gbTrace > 0) emit_line("resolution Strategy=>4 (res-f4)");
-        C = createF4Res(m, max_level, strategy);
+        C = createF4Res(m, max_level, strategy, numThreads, parallelizeByDegree);
         if (C == nullptr) return nullptr;
         break;
     }
-  if (C == 0)
+  if (C == nullptr)
     {
       ERROR("unknown resolution algorithm");
-      return 0;
+      return nullptr;
     }
   intern_res(C);
   return C;
@@ -226,7 +243,7 @@ MutableMatrix /* or null */ *ResolutionComputation::get_matrix(int level,
 {
   // the default version gives an error that it isn't defined
   ERROR("this function not defined for this resolution type");
-  return 0;
+  return nullptr;
 }
 
 // Local Variables:

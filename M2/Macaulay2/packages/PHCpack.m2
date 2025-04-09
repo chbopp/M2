@@ -1,3 +1,7 @@
+phcPresent := run ("type phc >/dev/null 2>&1") === 0
+phcVersion := if phcPresent then replace("PHCv([0-9.]+) .*\n","\\1",get "! phc --version")
+phcVersionNeeded := "2.4.77"
+phcPresentAndModern := phcPresent and match("^[0-9.]+$",phcVersion) and phcVersion >= phcVersionNeeded
 
 newPackage(
   "PHCpack",
@@ -12,47 +16,36 @@ newPackage(
      HomePage => "http://mypages.iit.edu/~spetrov1/"},
     {Name => "Jan Verschelde", 
      Email => "jan@math.uic.edu",
-     HomePage => "http://www.math.uic.edu/~jan"},
-    {Name => "Contributing Author: Anton Leykin",
-     HomePage => "http://www.math.gatech.edu/~leykin"},
-    {Name => "Contributing Author: Jeff Sommars",
-     HomePage => "http://www.math.uic.edu/~sommars"},
-    {Name => "Contributing Author: Taylor Brysiewicz",
-     HomePage => "http://www.math.tamu.edu/~tbrysiewicz/"},
-    {Name => "Contributing Author: Corey Harris",
-     HomePage => "http://www.coreyharris.name/"},
-    {Name => "Contributing Author: Diego Cifuentes",
-     HomePage => "http://www.mit.edu/~diegcif/"},
-    {Name => "Contributing Author: Kaie Kubjas",
-     HomePage => "http://www.kaiekubjas.com/"},
-    {Name => "Contributing Author: Anna Seigal",
-     HomePage => "https://math.berkeley.edu/~seigal/"}
+     HomePage => "http://www.math.uic.edu/~jan"}
   },
-  Headline => "Interface to PHCpack",
-  Configuration => { 
-    "path" => "",
-    "PHCexe"=>"phc", 
-    "keep files" => true
-  },
+  Headline => "interface to PHCpack",
+  Keywords => {"Numerical Algebraic Geometry", "Interfaces"},
   Certification => {
 	"journal name" => "The Journal of Software for Algebra and Geometry",
-	"journal URI" => "http://j-sag.org/",
+	"journal URI" => "https://msp.org/jsag/",
 	"article title" => "Interfacing with PHCpack",
 	"acceptance date" => "2013-07-11",
-	"published article URI" => "http://www.j-sag.org/Volume5/jsag-4-2013.pdf",
-	"published code URI" => "http://www.j-sag.org/Volume5/PHCpack.m2",
-	"repository code URI" => "http://github.com/Macaulay2/M2/blob/master/M2/Macaulay2/packages/PHCpack.m2",
+	"published article URI" => "https://msp.org/jsag/2013/5-1/p04.xhtml",
+	"published article DOI" => "10.2140/jsag.2013.5.20",
+	"published code URI" => "https://msp.org/jsag/2013/5-1/jsag-v5-n1-x04-code.zip",
+	"repository code URI" => "https://github.com/Macaulay2/M2/blob/master/M2/Macaulay2/packages/PHCpack.m2",
 	"release at publication" => "48d32ceffeeb807b23eee20a5c9c243ce085b3ef",
 	"version at publication" => "1.6",
 	"volume number" => "5",
-	"volume URI" => "http://j-sag.org/Volume5/"
+	"volume URI" => "https://msp.org/jsag/2013/5-1/"
 	},
   DebuggingMode => false,
   AuxiliaryFiles => true,
   CacheExampleOutput => true,
-  PackageImports => {"SimpleDoc"},
-  PackageExports => {"NAGtypes"}
+  PackageExports => {"NAGtypes"},
+  OptionalComponentsPresent => phcPresentAndModern
 )
+
+checkIsRunnable = () -> (
+     if not phcPresent then error "phc not present";
+     if not phcPresentAndModern 
+     then error ("phc present but not modern enough; need version ", phcVersionNeeded, " but found version ",phcVersion);
+     )
 
 --Copyright 2013 Elizabeth Gross, Sonja Petrovic, Jan Verschelde.
 --  You may redistribute this file under the terms of the GNU General
@@ -106,8 +99,12 @@ protect Append
 --##########################################################################--
 
 PHCDBG = 0; -- debug level (10=keep temp files)
-path'PHC = (options PHCpack).Configuration#"path";
-PHCexe=path'PHC|(options PHCpack).Configuration#"PHCexe"; 
+
+-- We used to allow the user to set this in the "Configuration" of the package, but we need
+-- to know whether the program is present before "newPackage" runs, and thus there is no
+-- good way to get the option early enough.
+PHCexe = "phc "|(if member("--no-randomize",commandLine) then "-0123456 " else "")  
+
 -- this is the executable string that make sures that calls to PHCpack run:
 -- NOTE: the absolute path should be put into the init-PHCpack.m2 file 
 
@@ -242,7 +239,7 @@ parseSolutions (String,Ring) := o -> (s,R) -> (
 --         );
 --         close f;
 --         foutname := fname | ".sols";
---         run("phc -z "|fname|" "|foutname);
+--         if checkIsRunnable() then run(PHCexe|" -z "|fname|" "|foutname);
 --         parseSolutions(get foutname,R)
 --     )
 -- )
@@ -302,7 +299,8 @@ parseIntermediateSolutions (String,Ring) := (output,R) -> (
         f << "===========================================================================" << endl;
         f << get oldf;
         close f;
-        run("phc -z "|pf#0|".final "|pf#0|".sols");
+        checkIsRunnable();
+	run(PHCexe|"-z "|pf#0|".final "|pf#0|".sols");
         results = append(results,parseSolutions(pf#0|".sols",R));
     );
     results
@@ -428,11 +426,21 @@ systemFromFile (String) := (name) -> (
       if #L_j != 0 then (
         if (L_j_(#L_j-1) != ";") then (
           -- we have to bite off the first "+" sign of the term
-          term = value substring(1,#L_j-1,L_j);
+          -- but check if the first character is a plus!
+          if (L_j_0 == "+") or (L_j_0 == "-") then
+             term = value substring(1,#L_j, L_j)  -- substring(1,#L_j-1,L_j)
+          else
+             term = value substring(0,#L_j, L_j); -- substring(0,#L_j-1,L_j);
           if (L_j_0 == "+") then p = p + term else p = p - term;
         ) else ( -- in this case (L_j_(#L_j-1) == ";") holds
-          term = value substring(1,#L_j-2,L_j);
-          if (L_j_0 == "+") then p = p + term else p = p - term;
+          if (L_j_0 == "+") or (L_j_0 == "-") then
+             term = value substring(1,#L_j-1,L_j)  -- substring(1,#L_j-2,L_j)
+          else
+             term = value substring(0,#L_j-1,L_j); -- substring(0,#L_j-2,L_j)
+          if (#L_j > 1) then -- take care of a lonely ";"
+          (
+             if (L_j_0 == "+") then p = p + term else p = p - term;
+          );
           stop = true; result = result | {p}
         );
       ); j = j + 1;
@@ -468,6 +476,7 @@ witnessSetFromFile (String) := (name) -> (
   d := dimEmbedding(e);
   witnessPointsFile := temporaryFileName() | "PHCwitnessPoints";
   if fileExists witnessPointsFile then removeFile witnessPointsFile;
+  checkIsRunnable();
   run(PHCexe|" -z " | name | " "|witnessPointsFile);
   eR := ring first e;
   g := parseSolutions(witnessPointsFile,eR);
@@ -582,7 +591,7 @@ witnessSuperSetsFilter (MutableList,List) := (witsets,pts) -> (
   local c;
   for p in pts do (
     found := false;
-    if instance(p,Point)
+    if instance(p,AbstractPoint)
      then c = p
      else c = point{p};
     for w in witsets when (not found) do (
@@ -640,7 +649,8 @@ cascade (List) := o -> (system) -> (
     stdio << "writing output to file " << PHCoutputFile << endl;
   
   systemToFile(system,PHCinputFile);
-  s := concatenate("0\ny\n",PHCinputFile); -- option 0, system on file
+  s := concatenate("0\n0\ny\n",PHCinputFile); -- option 0, system on file
+  -- extra 0 for double precision
   s = concatenate(s,"\n",PHCoutputFile);   -- add name of the output file
   s = concatenate(s,"\n");
   s = concatenate(s,toString(startdim));   -- add top dimension
@@ -652,6 +662,7 @@ cascade (List) := o -> (system) -> (
     ( stdio << "calling phc -c < " << PHCbatchFile;
     stdio << " > " << PHCsessionFile << endl
     );
+    checkIsRunnable();
     run(PHCexe|" -c < " | PHCbatchFile | " > " | PHCsessionFile);
   if o.Verbose then
     ( stdio << "output of phc -c is in file " << PHCoutputFile << endl;
@@ -686,12 +697,13 @@ cascade (List) := o -> (system) -> (
         ) else (
           supsols := points(supwit);
           genpts := witnessSuperSetsFilter(result,supsols);
-          g := toList(apply(genpts,x->point{x}));
+	  g := toList(apply(genpts,x->if instance(x,AbstractPoint) then point x else point{x}));
           ws := witnessSet(ideal(equations(supwit)),ideal(slice(supwit)),g);
           if #g!=0 then result = append(result,(i,ws));
         );
       ) else (
-        run(PHCexe | " -z " | fil | " " | PHCsolsFile);
+        checkIsRunnable(); 
+	run(PHCexe | " -z " | fil | " " | PHCsolsFile);
         use R;
 	supwit = witnessSetFromFile(fil);
         if o.Verbose then
@@ -741,6 +753,7 @@ constructEmbedding (List, ZZ) := o->  (system, dimension) -> (
   (  stdio << "calling phc -c < " << PHCbatchFile;
      stdio << " > " << PHCsessionFile << endl
      );
+  checkIsRunnable(); 
   run(PHCexe|" -c < " | PHCbatchFile | " > " | PHCsessionFile);
   if o.Verbose then
     stdio << "output of phc -c is in file " << PHCoutputFile << endl;
@@ -796,6 +809,7 @@ factorWitnessSet (WitnessSet ) := o->  w -> (
   close bat;
   if o.Verbose then
     stdio << "... calling monodromy breakup ..." << endl;
+  checkIsRunnable(); 
   run(PHCexe|" -f < " | PHCbatchFile | " > " | PHCsessionFile);
   if o.Verbose then
     (stdio << "session information of phc -f is in " << PHCsessionFile << endl;
@@ -812,7 +826,7 @@ factorWitnessSet (WitnessSet ) := o->  w -> (
     name = PHCinputFile | "_f" | toString(count+1);
   );
   stdio << "found " << count << " irreducible factors " << endl;
-  for ws in result do ws#IsIrreducible=true;
+  for ws in result do ws.cache.IsIrreducible=true;
   return numericalVariety(toList(result));
 )
 
@@ -821,7 +835,7 @@ factorWitnessSet (WitnessSet ) := o->  w -> (
 ------------------------
 
 isCoordinateZero = method(TypicalValue => Boolean)
-isCoordinateZero (Point,ZZ,RR) := (sol,k,tol) -> (
+isCoordinateZero (AbstractPoint,ZZ,RR) := (sol,k,tol) -> (
   -- IN: sol, a solution of a polynomial system;
   --     k, index to a coordinate must be within range;
   --     tol, tolerance for the absolute value of the k-th coordinate.
@@ -836,7 +850,7 @@ isCoordinateZero (Point,ZZ,RR) := (sol,k,tol) -> (
 ---------------------------
 
 isWitnessSetMember = method(TypicalValue => Boolean, Options => {Verbose => false})
-isWitnessSetMember (WitnessSet,Point) := o-> (witset,testpoint) -> (
+isWitnessSetMember (WitnessSet,AbstractPoint) := o-> (witset,testpoint) -> (
   -- IN: witset, a witness set for a positive dimensional solution set,
   --     testpoint, does it belong to the solution set?
   -- OUT: true if testpoint is a member of the solution set,
@@ -868,6 +882,7 @@ isWitnessSetMember (WitnessSet,Point) := o-> (witset,testpoint) -> (
     stdio << "calling phc -f < " << PHCbatchFile;
     stdio << " > " << PHCsessionFile << endl;
   );
+  checkIsRunnable(); 
   run(PHCexe|" -f < " | PHCbatchFile | " > " | PHCsessionFile);
   if o.Verbose then
     stdio << "output of phc -f is in file " << PHCoutputFile << endl;
@@ -933,10 +948,12 @@ mixedVolume  List := Sequence => opt -> system -> (
   
   if opt.interactive then (
     << endl << "If you need a start system, the filename MUST be " << endl << endl << startfile << endl << endl << endl;
+    checkIsRunnable(); 
     run(PHCexe|" -m "|infile|" "|outfile);
   ) else (
   -- launching mixed volume calculator :
   execstr := PHCexe|" -m "|(if opt.numThreads > 1 then ("-t"|opt.numThreads|" ") else "")|infile|" "|outfile|" < "|cmdfile|" > "|sesfile;
+  checkIsRunnable(); 
   ret := run(execstr);
   if ret =!= 0 then 
     error "error occurred while executing PHCpack command: phc -m";
@@ -969,6 +986,7 @@ mixedVolume  List := Sequence => opt -> system -> (
     solsfile := startfile | ".sols";
     p := startSystemFromFile(startfile);
     execstr = PHCexe|" -z "|startfile|" "|solsfile;
+    checkIsRunnable(); 
     ret = run(execstr);
     if ret =!= 0 then
       error "error occurred while executing PHCpack command: phc -z";
@@ -1059,12 +1077,14 @@ refineSolutions (List,List,ZZ) := o-> (f,sols,dp) -> (
   bat << s;
   close bat;
   -- stdio << "running phc -v, writing output to " << PHCsessionFile << endl;
+  checkIsRunnable(); 
   run(PHCexe|" -v < " | PHCbatchFile | " > " | PHCsessionFile);
   if o.Verbose then
     (  stdio << "using temporary file " << PHCoutputFile;
     stdio << " for storing refined solutions " << endl;
     stdio << "solutions in Maple format in " << PHCsolutions << endl
     );
+  checkIsRunnable(); 
   run(PHCexe|" -z " | PHCoutputFile | " " | PHCsolutions);
   b := ceiling(log_2(10^dp));
   result := parseSolutions(PHCsolutions,R,Bits=>b);
@@ -1079,7 +1099,7 @@ solveSystem = method(TypicalValue => List,
   Options => {Verbose => false, numThreads=>0, randomSeed => -1, 
               computingPrecision => 1})
 solveSystem List := List =>  o->system -> (
-  -- IN:  system = list of polynomials with complex coeffiecients, 
+  -- IN:  system = list of polynomials with complex coefficients,
   -- i.e. the system to solved 
   -- OUT: solutions to the system, a list of Points
   -- fixed removing of nonzero slack variables
@@ -1104,7 +1124,7 @@ solveSystem List := List =>  o->system -> (
   local newR;
   R := ring ideal system;
 
-  stdio << "*** variables in the ring : " << gens R << " ***" << endl;
+  -- stdio << "*** variables in the ring : " << gens R << " ***" << endl;
 
   n := #system;
   if n < numgens R then
@@ -1131,12 +1151,14 @@ solveSystem List := List =>  o->system -> (
     |(if o.numThreads > 1 then ("-t"|o.numThreads|" ") else "")
     |(if o.randomSeed > -1 then ("-0"|o.randomSeed|" ") else "")
     |infile|" "|outfile;
+  checkIsRunnable(); 
   ret := run(execstr);
   if ret =!= 0 then 
     error "error occurred while executing PHCpack command: phc -b";
   if o.Verbose then
     stdio << "solutions are in the file " << solnsfile << endl;
   execstr = PHCexe|" -z "|infile|" " |solnsfile;
+  checkIsRunnable(); 
   ret = run(execstr);
   if ret =!= 0 then 
     error "error occurred while executing PHCpack command: phc -z";
@@ -1159,7 +1181,7 @@ solveSystem List := List =>  o->system -> (
     if o.Verbose then
       stdio << "after filtering nonsolutions : "
             << #result << " solutions left" << endl;
-    scan(result, (sol -> sol#Coordinates = take(sol#Coordinates, numgens R)));
+    result = apply(result, sol -> point(take(coordinates sol, numgens R), sol.cache));
     newR = (coefficientRing R)(gens R) -- put variables back in original ring
   );
   result
@@ -1171,7 +1193,7 @@ solveSystem List := List =>  o->system -> (
 
 solveRationalSystem = method(TypicalValue => List, Options => {Verbose => false})
 solveRationalSystem  List :=  o-> system -> (
-  -- IN:  system = list of rational equations with complex coeffiecients, 
+  -- IN:  system = list of rational equations with complex coefficients,
   -- i.e. the system to solved
   -- OUT: solutions to the system, a list of Points
   
@@ -1208,10 +1230,12 @@ solveRationalSystem  List :=  o-> system -> (
   
   -- launching blackbox solver:
   execstr := PHCexe|" -b " |infile|" "|outfile;
+  checkIsRunnable(); 
   ret := run(execstr);
   if ret =!= 0 then 
     error "error occurred while executing PHCpack command: phc -b";
   execstr = PHCexe|" -z "|infile|" " |solnsfile;
+  checkIsRunnable(); 
   ret = run(execstr);
   if ret =!= 0 then 
     error "error occurred while executing PHCpack command: phc -z";
@@ -1301,7 +1325,7 @@ trackPaths (List,List,List) := List => o -> (T,S,Ssols) -> (
   -- IN: T, target system to be solved;
   --     S, start system with solutions in Ssols;
   --     Ssols, solutions at the start of the paths.
-  -- OPT INTPUTS: gamma, constant for gamma trick
+  -- OPT INPUTS: gamma, constant for gamma trick
   --     tDegree, degree of continuation parameter      
   -- OUT: Tsols, solutions at the end of the paths.
   
@@ -1360,8 +1384,10 @@ trackPaths (List,List,List) := List => o -> (T,S,Ssols) -> (
     );
     close bat;
     << batchfile << endl;
+    checkIsRunnable(); 
     run(PHCexe|" -p "|(if o.numThreads > 1 then 
        ("-t"|o.numThreads) else "")|"<"|batchfile|" >phc_session.log");
+    checkIsRunnable(); 
     run(PHCexe|" -z "|outfile|" "|Tsolsfile);
   )
   -- making batch file
@@ -1372,6 +1398,7 @@ trackPaths (List,List,List) := List => o -> (T,S,Ssols) -> (
     << "running (cat "|batchfile|"; cat) | PHCexe -p "<< endl;
     -- (cat batch; cat) | phc -p
     run("(cat "|batchfile|"; cat) | "|PHCexe|" -p ");
+    checkIsRunnable(); 
     run(PHCexe|" -z "|outfile|" "|Tsolsfile);
       
   ) else (
@@ -1416,8 +1443,10 @@ trackPaths (List,List,List) := List => o -> (T,S,Ssols) -> (
     close bat;
   );
 
+  checkIsRunnable(); 
   run(PHCexe|" -p "|(if o.numThreads > 1 then 
      ("-t"|o.numThreads) else "")|"<"|batchfile|" >phc_session.log");
+  checkIsRunnable(); 
   run(PHCexe|" -z "|outfile|" "|Tsolsfile);
   
   );
@@ -1434,8 +1463,8 @@ trackPaths (List,List,List) := List => o -> (T,S,Ssols) -> (
     ));
     totalN := #result;
     scan(result, s->(
-      if s#1#"mult">1 then error "mutiple root encountered";
-      if s#1#"mult"<0 then error "negative mutiplicity";
+      if s#1#"mult">1 then error "multiple root encountered";
+      if s#1#"mult"<0 then error "negative multiplicity";
     ));			 
     result = select(result, 
       s-> 
@@ -1790,7 +1819,7 @@ versionNumber(Nothing) :=  o -> (Nothing) -> (
 --     then the output of phc --version is printed to screen.
 -- OUT: information about the current version of phc.
   filename := temporaryFileName() | "PHCversion";
-  run(PHCexe|" --version > "|filename);
+  run("phc --version > "|filename);
   data := get filename;
   if o.Verbose then
     stdio << data << endl;
@@ -1821,16 +1850,18 @@ load "./PHCpack/PHCpackDoc.m2";
 --##########################################################################
 
 -----------------------------------
--- cascade
+-- test 0: cascade
 -----------------------------------
 TEST/// 
       R=CC[x11,x22,x21,x12,x23,x13,x14,x24]
       L={x11*x22-x21*x12,x12*x23-x22*x13,x13*x24-x23*x14}
-      assert( # cascade L == 1 )--there is one component of dim.5.
+     -- assert( # cascade L == 1 )--there is one component of dim.5.
+      C=cascade(L, Verbose=>true)
+      assert(#C == 1)
 ///;
 
 -----------------------------------
---constructEmbedding
+--test 1: constructEmbedding
 -----------------------------------
 TEST///
       R=CC[x,y,z]
@@ -1840,7 +1871,7 @@ TEST///
       assert ( member(zz1, Emb) == true ) --one of the eqns is zz1
 ///;
 -----------------------------------
---factorWitnessSet
+-- test 2: factorWitnessSet
 -----------------------------------
 TEST///
     R = CC[x,y];
@@ -1851,16 +1882,15 @@ TEST///
 ///;
 
 -----------------------------------
---isCoordinateZero
+-- test 3: isCoordinateZero
 -----------------------------------
 TEST///
      P=point({{0,1.0e-12}})
      assert (isCoordinateZero(P,1,1.0e-10) == true)
 ///;     
 
-
 -----------------------------------
--- isWitnessSetMember
+-- test 4: isWitnessSetMember
 -----------------------------------
 TEST/// 
     R = CC [x,y]
@@ -1870,7 +1900,7 @@ TEST///
 ///;
 
 -----------------------------------
--- mixedVolume
+-- test 5: mixedVolume
 -----------------------------------
 TEST/// 
      R=CC[x,y,z] 
@@ -1888,7 +1918,7 @@ TEST///
 ///;
 
 -----------------------------------
--- nonZeroFilter
+-- test 6: nonZeroFilter
 -----------------------------------
 TEST/// 
      R = CC[x,y]; 
@@ -1899,19 +1929,19 @@ TEST///
 ///;
 
 -------------------------------------
---numericalIrreducibleDecomposition
+-- test 7: numericalIrreducibleDecomposition
 -------------------------------------
 
 TEST///
       R = CC [x,y]
-      system={x^2*y}
+      system={x^2*(y^2-1)}
       V=numericalIrreducibleDecomposition(system)
-      assert (dim V == 1) --there are two components of dimension 1
-      assert ((# V#1)==2)
+      assert all(components V, c->dim c==1) --there are three components of dimension 1
+      assert (#components V == 3)
 ///;      
 
 -----------------------------------
--- refineSolutions
+-- test 8: refineSolutions
 -----------------------------------
 TEST/// 
       R = CC[x,y]; 
@@ -1926,7 +1956,7 @@ TEST///
 ///;
 
 -----------------------------------
--- solveRationalSystem
+-- test 9: solveRationalSystem
 -----------------------------------
 TEST///
      QQ[x,y,z];
@@ -1938,7 +1968,7 @@ TEST///
 ///;
 
 -----------------------------------
--- solveSystem
+-- test 10: solveSystem
 -----------------------------------
 TEST/// 
      R=CC[x,y,z]
@@ -1954,9 +1984,8 @@ TEST///
      (abs((sol2-L_1#Coordinates)_0)<.00000000001 and abs((sol2-L_1#Coordinates)_1)<.00000000001 and abs((sol2-L_1#Coordinates)_2)<.00000000001))
 ///;
 
-
 -----------------------------------
--- toLaurentPolynomial
+-- test 11: toLaurentPolynomial
 -----------------------------------
 TEST///
      QQ[x,y,z];
@@ -1969,7 +1998,7 @@ TEST///
 ///;
 
 -----------------------------------
---topWitnessSet
+-- test 12: topWitnessSet
 -----------------------------------
 TEST///
     R = CC[x,y];
@@ -1980,7 +2009,7 @@ TEST///
 ///;    
     
 -----------------------------------
--- trackPaths
+-- test 13: trackPaths
 -----------------------------------
 TEST/// 
      R = CC[x,y]; 
@@ -1991,7 +2020,7 @@ TEST///
 ///;
 
 -----------------------------------
--- zeroFilter
+-- test 14: zeroFilter
 -----------------------------------
 TEST/// 
      R = CC[x,y]; 
@@ -2077,7 +2106,7 @@ system = (sub(ideal rationalSystem, CC[var1]))_*
 V = numericalIrreducibleDecomposition system
 WitSets = V#5;
 w = first WitSets
-w#IsIrreducible
+w.cache.IsIrreducible
 
 R = ring rationalSystem_0
 PD = primaryDecomposition ideal rationalSystem

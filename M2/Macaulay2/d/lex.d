@@ -3,7 +3,6 @@
 use ctype;
 use tokens;
 use varstrin;
-use interrupts;
 
 export wordEOF := dummyWord; -- replaced later
 export wordEOC := dummyWord; -- replaced later
@@ -31,7 +30,7 @@ export makeUniqueWord(s:string,p:parseinfo):Word := (
      hashTable.hashCode = WordListCell(newWord,hashTable.hashCode);
      newWord);
 
-export NewlineW := Word("{*dummy word for newline*}",TCnone,0,newParseinfo());	    	  -- filled in by keywords.d
+export NewlineW := Word("-*dummy word for newline*-",TCnone,hash_t(0),newParseinfo());	    	  -- filled in by keywords.d
 export equal(t:ParseTree,w:Word):bool := (
      when t is u:Token do u.word == w else false
      );
@@ -97,8 +96,9 @@ recognize(file:PosFile):(null or Word) := (
 	  );
      when last
      is null do (
-	  printErrorMessage(position(file),"invalid character" );
+	  p := position(file);
 	  getc(file);
+	  printErrorMessage(p,"invalid character" );
 	  (null or Word)(NULL))
      is word:Word do ( 
 	  for length(word.name) do getc(file); 
@@ -112,7 +112,6 @@ getstringslashes(o:PosFile):(null or Word) := (		    -- /// ... ///
      getc(o);		  -- pass '/'
      getc(o);		  -- pass '/'
      pos := position(o);
-     hadnewline := false;
      tokenbuf << '\"';					    -- "
      while true do (
 	  ch := getc(o);
@@ -142,15 +141,15 @@ getstringslashes(o:PosFile):(null or Word) := (		    -- /// ... ///
 	  && peek(o,1) == int('/') then break;
 	  if ch == int('\"') || ch == int('\\') then tokenbuf << '\\';
      	  tokenbuf << char(ch);
-	  if ch == int('\n') && hadnewline && isatty(o) then return NULL; -- user gets out with an extra NEWLINE
-	  hadnewline = ch == int('\n')
 	  );
      getc(o);		  -- pass '/'
      getc(o);		  -- pass '/'
      tokenbuf << '\"';
      s := takestring(tokenbuf);
-     Word(s,TCstring,0,parseWORD));
+     Word(s,TCstring,hash_t(0),parseWORD));
 
+isbindigit(c:int):bool := c == int('0') || c == int('1');
+isoctdigit(c:int):bool := c >= int('0') && c <= int('7');
 ishexdigit(c:int):bool := (
      c >= int('0') && c <= int('9') ||
      c >= int('a') && c <= int('f') ||
@@ -161,7 +160,6 @@ getstring(o:PosFile):(null or Word) := (
      line := o.line;
      column := o.column;
      delimiter := getc(o);
-     hadnewline := false;
      escaped := false;
      tokenbuf << char(delimiter);
      hexcoming := 0;
@@ -189,7 +187,8 @@ getstring(o:PosFile):(null or Word) := (
 		    hexcoming = hexcoming - 1;
 		    )
 	       else (
-		    printErrorMessage(o.filename,line,column,"expected hex digit in unicode sequence here");
+		    printErrorMessage(o.filename,line,column,"expected " +
+			tostring(hexcoming) + " more hex digit(s)");
 		    empty(tokenbuf);
 		    while true do (ch2 := getc(o); if ch2 == EOF || ch2 == ERROR || ch2 == int('\n') then return NULL;);
 		    )
@@ -198,12 +197,17 @@ getstring(o:PosFile):(null or Word) := (
 	  then (
 	       if char(ch) == '"' 				    -- "
 	       || char(ch) == 'r'
+	       || char(ch) == 'a'
 	       || char(ch) == 'b'
 	       || char(ch) == 'n'
 	       || char(ch) == 't'
+	       || char(ch) == 'v'
 	       || char(ch) == 'f'
+	       || char(ch) == 'e'
+	       || char(ch) == 'E'
 	       || char(ch) == '\\'
 	       || (char(ch) == 'u' && (hexcoming = 4; true)) -- allow unicode entry this way : "\u53f7"
+	       || (char(ch) == 'x' && (hexcoming = 2; true))
 	       || int('0') <= ch && ch < int('8')
 	       then escaped = false
 	       else (
@@ -214,12 +218,9 @@ getstring(o:PosFile):(null or Word) := (
 	       )
 	  else if ch == delimiter then break
 	  else if ch == int('\\') then escaped = true;
-	  if ch == int('\n') && hadnewline && isatty(o) then return NULL;	-- user gets out with an extra NEWLINE
-	  hadnewline = ch == int('\n');
 	  );
      s := takestring(tokenbuf);
-     Word(s,TCstring,0,parseWORD));
-ismore(file:PosFile):bool := ( c := peek(file); c != EOF && c != ERROR );
+     Word(s,TCstring,hash_t(0),parseWORD));
 swline := ushort(0);
 swcolumn := ushort(0);
 skipwhite(file:PosFile):int := (
@@ -261,45 +262,12 @@ skipwhite(file:PosFile):int := (
 		    c == int('\n') || c == EOF
 		    ) do getc(file);
 	       )
-	  else if c == int('{') && peek(file,1) == int('*') then (
-	       -- block comment: {* ... *}, deprecated style, not colored by emacs
-	       getc(file); getc(file);
-	       hadnewline := false;
-	       until (
-		    c = peek(file);
-		    if c == ERROR || c == EOF then return c;
-		    if c == int('\n') then (
-			 if hadnewline && isatty(file) then (
-			      getc(file);
-			      return ERROR; -- user gets out with an extra NEWLINE
-			      );
-			 hadnewline = true;
-			 )
-		    else hadnewline = false;
-		    c == int('*') && (
-			 getc(file);
-			 c = peek(file);
-		    	 if c == ERROR || c == EOF then return c; 
-		    	 c == int('}')			    -- {
-		    	 && (
-			      getc(file);
-			      true ) ) )
-	       do getc(file))
 	  else if c == int('-') && peek(file,1) == int('*') then (
 	       -- block comment: -* ... *-
 	       getc(file); getc(file);
-	       hadnewline := false;
 	       until (
 		    c = peek(file);
 		    if c == ERROR || c == EOF then return c;
-		    if c == int('\n') then (
-			 if hadnewline && isatty(file) then (
-			      getc(file);
-			      return ERROR; -- user gets out with an extra NEWLINE
-			      );
-			 hadnewline = true;
-			 )
-		    else hadnewline = false;
 		    c == int('*') && (
 			 getc(file);
 			 c = peek(file);
@@ -312,13 +280,14 @@ skipwhite(file:PosFile):int := (
 	  else return 0));
 
 -- this errorToken means there was a parsing error or an error reading the file!
-export errorToken := Token(Word("{*error token*}",TCnone,0,newParseinfo()),
-     dummyPosition.filename,
-     dummyPosition.line,
-     dummyPosition.column,
-     dummyPosition.loadDepth,
+export errorToken := Token(Word("-*error token*-",TCnone,hash_t(0),newParseinfo()),
+     dummyPosition,
      globalDictionary,			    -- should replace this by dummyDictionary, I think
      dummySymbol,false);
+
+newPosition(file:PosFile, line:ushort, column:ushort):Position := Position(
+    --             [ beginning ] [      endpoint       ] [   focus   ]
+    file.filename, line, column, file.line, file.column, line, column, loadDepth);
 
 gettoken1(file:PosFile,sawNewline:bool):Token := (
      -- warning : tokenbuf is static
@@ -326,32 +295,62 @@ gettoken1(file:PosFile,sawNewline:bool):Token := (
 	  rc := skipwhite(file);
 	  if rc == ERROR then return errorToken;
 	  if rc == EOF  then (
-	       printErrorMessage(file.filename,swline,swcolumn,"EOF in block comment {* ... *} beginning here");
+	       printErrorMessage(file.filename,swline,swcolumn,"EOF in block comment -* ... *- beginning here");
 	       -- empty(tokenbuf);
 	       -- while true do (ch2 := getc(file); if ch2 == EOF || ch2 == ERROR || ch2 == int('\n') then break;);
+     	       return errorToken;
+	       );
+	  if rc == DEPRECATED then (
+	       printErrorMessage(file.filename,swline,swcolumn,"encountered disabled block comment syntax {* ... *} beginning here");
      	       return errorToken;
 	       );
 	  line := file.line;
 	  column := file.column;
 	  ch := peek(file);
-     	  if iseof(ch) then return Token(wordEOF,file.filename, line, column, loadDepth,globalDictionary,dummySymbol,sawNewline)
+	  if iseof(ch) then return Token(wordEOF,
+	      newPosition(file, line, column), globalDictionary, dummySymbol, sawNewline)
      	  else if iserror(ch) then return errorToken
 	  else if ch == int('\n') then (
 	       getc(file);
 	       return Token(
 		    if file.file.fulllines then wordEOC else NewlineW,
-		    file.filename, line, column, loadDepth,globalDictionary,dummySymbol,sawNewline))
-	  else if isalpha(ch) && ch != int('\'') then (
+		    newPosition(file, line, column), globalDictionary, dummySymbol, sawNewline))
+	  else if isalpha(ch) then ( -- valid symbols are an alpha (letters, any unicode except 226) followed by any number of alphanum (alpha, digit, dollar, prime)
 	       tokenbuf << char(getc(file));
 	       while isalnum(peek(file)) do tokenbuf << char(getc(file));
-	       return Token(makeUniqueWord(takestring(tokenbuf),parseWORD),file.filename, line, column, loadDepth,globalDictionary,dummySymbol,sawNewline))
+	       return Token(makeUniqueWord(takestring(tokenbuf), parseWORD),
+		   newPosition(file, line, column), globalDictionary, dummySymbol, sawNewline))
 	  else if isdigit(ch) || ch==int('.') && isdigit(peek(file,1)) then (
 	       typecode := TCint;
-	       while isdigit(peek(file)) do (
-		    tokenbuf << char(getc(file))
-		    );
+	       decimal := true;
+	       if ch == int('0') then (
+		    tokenbuf << char(getc(file));
+		    c := peek(file);
+		    if (c == int('b') || c == int('B')) &&
+			isbindigit(peek(file,1)) then (
+			 decimal = false;
+			 tokenbuf << char(getc(file));
+			 while isbindigit(peek(file)) do
+			      tokenbuf << char(getc(file)))
+		    else if (c == int('o') || c == int('O')) &&
+			     isoctdigit(peek(file,1)) then (
+			 decimal = false;
+			 tokenbuf << char(getc(file));
+			 while isoctdigit(peek(file)) do
+			      tokenbuf << char(getc(file)))
+		    else if (c == int('x') || c == int('X')) &&
+			     ishexdigit(peek(file,1)) then (
+			 decimal = false;
+			 tokenbuf << char(getc(file));
+			 while ishexdigit(peek(file)) do
+			      tokenbuf << char(getc(file)))
+		    else while isdigit(peek(file)) do
+			      tokenbuf << char(getc(file))
+		   )
+	       else while isdigit(peek(file)) do
+		    tokenbuf << char(getc(file));
 	       c := peek(file);
-	       if c == int('.') && peek(file,1) != int('.') || c == int('p') || c == int('e')
+	       if decimal && (c == int('.') && peek(file,1) != int('.') || c == int('p') || c == int('e')) || c == int('E')
 	       then (
 		    typecode = TCRR;
 		    if c == int('.') then (
@@ -372,9 +371,11 @@ gettoken1(file:PosFile,sawNewline:bool):Token := (
 			      )
 			 );
 	       	    c = peek(file);
-		    if c == int('e') then (
+		    if c == int('e') || c == int('E') then (
 			 tokenbuf << char(getc(file));
-			 if ( peek(file) == int('-') && isdigit(peek(file,1)) || isdigit(peek(file)) )
+			 if ( peek(file) == int('-') && isdigit(peek(file,1)) ||
+			      peek(file) == int('+') && isdigit(peek(file,1)) ||
+			      isdigit(peek(file)) )
 			 then (
 			      tokenbuf << char(getc(file));
 			      while isdigit(peek(file)) do tokenbuf << char(getc(file));
@@ -391,35 +392,46 @@ gettoken1(file:PosFile,sawNewline:bool):Token := (
 	       c = peek(file);
 	       if isalpha(c) then printWarningMessage(position(file),"character '"+char(c)+"' immediately following number");
 	       s := takestring(tokenbuf);
-	       return Token(Word(s,typecode,0, parseWORD),file.filename, line, column, loadDepth,globalDictionary,dummySymbol,sawNewline)) 
+	       return Token(Word(s,typecode,hash_t(0), parseWORD),
+		   newPosition(file, line, column), globalDictionary, dummySymbol, sawNewline))
 	  else if ch == int('/') && peek(file,1) == int('/') && peek(file,2) == int('/') then (
 	       when getstringslashes(file)
 	       is null do (
 		    empty(tokenbuf);
 		    return errorToken
 		    )
-	       is word:Word do return Token(word,file.filename, line, column, loadDepth,globalDictionary,dummySymbol,sawNewline))
+	       is word:Word do return Token(word,
+		   newPosition(file, line, column), globalDictionary, dummySymbol, sawNewline))
 	  else if isquote(ch) then (
 	       when getstring(file)
 	       is null do (
 		    empty(tokenbuf);
 		    return errorToken
 		    )
-	       is word:Word do return Token(word,file.filename, line, column, loadDepth,globalDictionary,dummySymbol,sawNewline))
+	       is word:Word do return Token(word,
+		   newPosition(file, line, column), globalDictionary, dummySymbol, sawNewline))
+	  else if ch == 226 then ( -- unicode math symbols
+	       tokenbuf << char(getc(file));
+	       tokenbuf << char(getc(file));
+	       tokenbuf << char(getc(file));
+	       return Token(makeUniqueWord(takestring(tokenbuf), parseWORD),
+		   newPosition(file, line, column), globalDictionary, dummySymbol, sawNewline))
 	  else (
 	       when recognize(file)
 	       is null do (
 		    empty(tokenbuf);
 		    return errorToken
 		    )
-	       is word:Word do return Token(word,file.filename, line, column, loadDepth,globalDictionary,dummySymbol,sawNewline))));
+	       is word:Word do return Token(word,
+		   newPosition(file, line, column), globalDictionary, dummySymbol, sawNewline))
+	       )
+	);
 export gettoken(file:PosFile,obeylines:bool):Token := (
      sawNewline := false;
      while true do (
 	  w := gettoken1(file,sawNewline);
 	  if w.word != NewlineW then return w;
 	  if obeylines then return w;
-	  if int(w.column) == 0 && isatty(file) then return errorToken; -- user gets out with an extra NEWLINE
 	  sawNewline = true;
 	  ));
 

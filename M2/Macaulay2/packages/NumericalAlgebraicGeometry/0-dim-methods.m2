@@ -4,7 +4,7 @@
 -- (loaded by  ../NumericalAlgebraicGeometry.m2)
 ------------------------------------------------------
 satisfiesOverdeterminedSystem = method(Options=>{ResidualTolerance=>null})
-satisfiesOverdeterminedSystem (Point, List) := o -> (s,F) -> (
+satisfiesOverdeterminedSystem (AbstractPoint, List) := o -> (s,F) -> (
     o = fillInDefaultOptions o; 
     norm evaluate(matrix{F},s) < o.ResidualTolerance    
     )
@@ -51,6 +51,7 @@ solveSystem PolySystem := List => o -> P -> (
      F := equations P; 
      R := ring F#0;
      v := flatten entries vars R;
+     if numgens R == 0 then error "expected at least one variable";
      if numgens R > #F then error "expected a 0-dimensional system";
      if member(o.Software, {M2,M2engine,M2enginePrecookedSLPs}) then ( 
 	  if o.Normalize then F = apply(F,normalize);
@@ -82,12 +83,12 @@ solveSystem PolySystem := List => o -> P -> (
 	  if o.PostProcess 
 	  then (
 	      plausible := select(result, p-> status p =!= Regular and status p != Origin and status p =!= Infinity 
-		  and p.LastT > 1-o.EndZoneFactor);
+		  and p.cache.LastT > 1-o.EndZoneFactor);
   	      result = select(result, p->status p === Regular or status p === Origin) | select( 
 		  apply(#plausible,     
 		      i -> (
 			  p := plausible#i;
-			  q := endGameCauchy(p#"H",1,p,"backtrack factor"=>2); -- endgame ...
+			  q := endGameCauchy(p.cache#"H",1,p,"backtrack factor"=>2); -- endgame ...
     	    	    	  -- if DBG>0 then if (i+1)%10 == 0 or i+1==#plausible then << endl;
       	      	      	  q
 			  )
@@ -117,7 +118,7 @@ solveSystem PolySystem := List => o -> P -> (
 
 totalDegreeStartSystem = method(TypicalValue => Sequence)
 totalDegreeStartSystem List := Sequence => T -> (
--- contructs a total degree start system and its solutions 
+-- constructs a total degree start system and its solutions 
 -- for the given target system T
 -- IN:  T = list of polynomials 
 -- OUT: (S,solsS}, where 
@@ -146,3 +147,11 @@ totalDegreeStartSystem List := Sequence => T -> (
      (S, apply(solsS,s->point{toList s}))
      ) 
 
+TEST ///
+needsPackage "NumericalAlgebraicGeometry"
+R = QQ[x,y]
+F = polySystem {x*y-1,x^2+y^3-2}
+solveSystem F
+NAGtrace 3
+assert(#solveSystem(F,Precision=>infinity) == 5)
+///

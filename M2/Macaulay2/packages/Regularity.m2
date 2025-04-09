@@ -6,7 +6,8 @@ newPackage(
         {Name => "Alexandra Seceleanu", Email => "asecele2@uiuc.edu"},
         {Name => "Nathaniel Stapleton", Email => "nstaple2@math.uiuc.edu"}
         },
-   Headline => "computes the Castelnuovo-Mumford regularity of a given homogeneous ideal",
+   Headline => "Castelnuovo-Mumford regularity of a homogeneous ideal",
+   Keywords => {"Commutative Algebra"},
    DebuggingMode => false
    )
 --=========================================================================--
@@ -18,7 +19,7 @@ newPackage(
 --         subschemes of P^n using quotients of monomial ideals",
 --         Journal of Pure and Applied Algebra 164/2001
 
-export{"mRegularity"}
+export{"mRegularity", "CM", "MonCurve"}
 
 
 -- ========================================================================
@@ -40,9 +41,9 @@ depthHomogMon = I-> (
 --============================================================================    
     
     
-    
+
 -- RANDOM LINEAR TRANSFORMATIONS
--- this function produces a upper triangular liniar transformation with entries in k[X]
+-- this function produces a upper triangular linear transformation with entries in k[X]
 
 upTRT2 = (k,X,m) -> (
      Trans := {};
@@ -101,14 +102,14 @@ isNested = (I,d) -> (
 
 satMon = (I,X)-> (
      m := flatten entries mingens I;
-     lamda := apply(entries transpose matrix flatten apply(m,exponents),max);
+     lambda := apply(entries transpose matrix flatten apply(m,exponents),max);
      l := {};
-     for i to #X -1 do l = l|{X_i^(lamda_i+1)};
+     for i to #X -1 do l = l|{X_i^(lambda_i+1)};
      gensIstar := flatten entries mingens (monomialIdeal l:monomialIdeal I);
      gensallvars :={};
      for i to #gensIstar-1 do if support gensIstar_i == X then gensallvars = gensallvars | {gensIstar_i}; --gensallvars contains the minimal gens of I that contain all variables
      if gensallvars == {} then return 0
-     else return sum lamda +1 - (min apply( gensallvars,degree))_0;
+     else return sum lambda +1 - (min apply( gensallvars,degree))_0;
      )
 
 
@@ -153,9 +154,6 @@ regMonCurve = (I,d) -> (
     m := ideal (apply (X,i-> f i));
     return (max apply((entries gens gb (I:m))_0,degree))_0
     )
-
-protect CM
-protect MonCurve
 
 delta = I -> min(flatten apply(flatten entries mingens I,degree))
      
@@ -230,7 +228,7 @@ document {
 }
 
 document {
-     Key => {mRegularity,(mRegularity,Ideal)},
+     Key => {mRegularity,(mRegularity,Ideal), MonCurve},
      Headline => "compute Castelnuovo-Mumford regularity",
      Usage => " mRegularity I",
      Inputs => {"I" => Ideal => {"a homogeneous ", TO Ideal},
@@ -399,7 +397,7 @@ fastReg (Ideal):= opts -> I -> (
 -- regCM
 
 -- INPUT: I = a Cohen-Macaulay ideal in a polynomial ring
--- OUTPUT: the Castelnupovo Mumford regularity of I
+-- OUTPUT: the Castelnuovo Mumford regularity of I
 
 regCM = (I,d) -> (
    R :=ring I;

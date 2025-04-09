@@ -101,9 +101,10 @@ void determinant(const DMatZZpFFPACK& mat, ZZpFFPACK::ElementType& result_det)
   else
     {
       DMatZZpFFPACK N(mat);
+      ZZpFFPACK::ElementType det = 0;
       result_det = FFPACK::Det(mat.ring().field(),
+                               det,
                                mat.numRows(),
-                               mat.numColumns(),
                                N.array(),
                                mat.numColumns());
     }
@@ -142,7 +143,7 @@ size_t nullSpace(const DMatZZpFFPACK& mat, DMatZZpFFPACK& nullspace)
   size_t nr = mat.numRows();
   size_t nc = mat.numColumns();
 
-  DMatZZpFFPACK::ElementType* nullspaceFFPACK = 0;
+  DMatZZpFFPACK::ElementType* nullspaceFFPACK = nullptr;
 
   size_t nullspace_dim;
   size_t nullspace_leading_dim;

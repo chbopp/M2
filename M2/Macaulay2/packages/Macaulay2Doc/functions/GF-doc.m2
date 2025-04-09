@@ -3,14 +3,16 @@
 --- notes: 
 
 document { 
-     Key => {GF,[GF, Variable],[GF, PrimitiveElement],[GF, SizeLimit],(GF,ZZ,ZZ),(GF,ZZ),(GF,Ring)},
+     Key => {GF,[GF, Variable],[GF, PrimitiveElement],[GF, SizeLimit],(GF,ZZ,ZZ),(GF,ZZ),(GF,Ring),[GF,Strategy]},
      Headline => "make a finite field",
      SYNOPSIS (
 	  BaseFunction => GF,
 	  Usage => "GF(p,n)\nGF(q)",
 	  Inputs => {
 	       "p" => "a prime number", "n",
-	       Variable => Symbol => "the name to use for the generator of the field",
+	       Variable => Symbol => {
+		   "the name to use for the generator of the field.  If null, ",
+		   "then ", VAR "a", " is used."},
 	       SizeLimit => ZZ => {
 		    "the limit on the size of a Galois field whose elements will be represented
 		    internally as powers of the primitive element"
@@ -30,11 +32,10 @@ document {
 	  ///,
 	  EXAMPLE lines ///
 	  K = GF 8
-	  x = K_0
-	  x^3+x
+	  a^3+a
 	  ///
 	  ),
-     SeeAlso => {toField},
+     SeeAlso => {toField, "finite fields"},
      SYNOPSIS (
 	  BaseFunction => GF,
 	  Usage => "GF R",

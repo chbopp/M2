@@ -1,42 +1,5 @@
-document {
-     Key => (symbol **, RingMap, Module),
-     Headline => "tensor product of a module via a ring map",
-     Usage => "f ** M",
-     Inputs => {
-	  "f" => { "a ring map from ", TT "R", " to ", TT "S" },
-	  "M" => { "an ", TT "R", "-module" }
-	  },
-     Outputs => {
-	  { "the tensor product of ", TT "M", " with ", TT "S", " over ", TT "R" }
-	  },
-     EXAMPLE lines ///
-	  R = QQ[x,y];
-	  S = QQ[t];
-	  f = map(S,R,{t^2,t^3})
-	  f ** coker vars R
-	  f ** image vars R
-	  ///,
-     SeeAlso => { (symbol SPACE, RingMap, Module) }
-     }
-
-document {
-     Key => (symbol **, RingMap, Matrix),
-     Headline => "tensor product of a module map via a ring map",
-     Usage => "f ** g",
-     Inputs => {
-	  "f" => { "from ", TT "R", " to ", TT "S" },
-	  "g" => { "a map of ", TT "R", "-modules" }
-	  },
-     Outputs => {
-	  { "the tensor product of ", TT "g", " with ", TT "S", " over ", TT "R" }
-	  },
-     EXAMPLE lines ///
-	  R = QQ[x,y];
-	  S = QQ[t];
-	  f = map(S,R,{t^2,t^3})
-	  f ** vars R
-	  ///,
-     SeeAlso => { (symbol SPACE, RingMap, Module) }
+undocumented {
+     (symbol SPACE, RingMap, Number)
      }
 
 document {
@@ -86,12 +49,12 @@ document {
      Caveat => {"If the rings ", TT "R", " and ", TT "S", " have different degree monoids, then the degrees of the image
         might need to be changed, since Macaulay2 sometimes doesn't have enough information to
 	determine the image degrees of elements of a free module."},
+     SeeAlso => {(symbol SPACE, RingElement, Sequence)}
      }
 
 document { 
      Key => {substitute,
 	  (substitute, Vector, Option),
-	  (substitute, Product, Thing),
 	  (substitute, Matrix, List),
 	  (substitute, Ideal, List),
 	  (substitute, Module, Matrix),
@@ -112,14 +75,11 @@ document {
 	  (substitute, Matrix, Matrix),
 	  (substitute, Ideal, Matrix),
 	  (substitute, Module, List),
-	  (substitute, Divide, Thing),
 	  (substitute, Module, Ring),
 	  (substitute, Matrix, Option),
-	  (substitute, Sum, Thing),
 	  (substitute, Ideal, Option),
 	  (substitute, Vector, Matrix),
 	  (substitute, RingElement, List),
-	  (substitute, Power, Thing),
 	  (substitute, RingElement, Ring),
 	  (substitute, Number, Ring)},
      Headline => "substituting values for variables",
@@ -182,14 +142,6 @@ document {
      	  use ring F;
      	  sub(F, {a=>1, b=>3, c=> 1, d=>13})
           ///,
-     "This can have strange results, if the values are all integers, but fractions are present.",
-     EXAMPLE lines ///
-          sub(1/3*a*b, {a=>1, b=>1, c=>1, d=>1})
-	  ///,
-     "By changing one of the values to a rational number, we ensure that the result will be rational.",
-     EXAMPLE lines ///
-          sub(1/3*a*b, {a=>1_QQ, b=>1, c=>1, d=>1})	  
-          ///,
      "If ", TT "f", " is an ideal or a submodule of a free module over ", TT "R", ", then substitution amounts to substitution
      in the matrix of generators of ", TT "f", ".  This is
      not the same as tensor product!",
@@ -237,8 +189,51 @@ document {
      the corresponding ring homomorphism is well-defined; this may produce
      surprising results, especially if rational coefficients are converted
      to integer coefficients.",
+     Subnodes => TO \ {
+	 (symbol SPACE, RingElement, Sequence)
+	 },
      SeeAlso => {RingMap, hilbertSeries, value, Expression}
      }
+
+undocumented (symbol SPACE, RingElement, Array) -- TODO: eventually deprecate this
+
+doc ///
+Node
+  Key
+    (symbol SPACE, RingElement, Sequence)
+    (symbol SPACE, RingElement, Number)
+    (symbol SPACE, RingElement, RingElement)
+  Headline
+    evaluation of polynomials
+  Usage
+    f(a,b,c)
+  Inputs
+    f:RingElement
+    :Nothing
+      @TT "(a,b,c)"@, a sequence of numbers or ring elements
+  Outputs
+    r:RingElement
+      the result of evaluating @TT "f"@ at the provided values
+  Description
+    Example
+      R = QQ[x,y,z];
+      f = x^3 - y^2 + 999*z;
+      f(10,0,0)
+      f(0,1,0)
+      f(0,0,1)
+      f(10,1,-1)
+      x^3 * f(0,0,1)
+      f(0,0,x+y+z) / 999
+      f(z,y,x)
+      f(x,x,x)
+    Text
+      Note that giving fewer variables results in partial evaluation.
+    Example
+      f(10)
+      f(10,y,z)
+  SeeAlso
+    (symbol SPACE, RingMap, RingElement)
+///
 
 -- document {
 --      Key => NonLinear,
@@ -336,30 +331,10 @@ document {
 --      "The default is for the code to select the best strategy heuristically."
 --      }
 
-document {
-     Key => PushforwardComputation,
-     Headline => "a type of list used internally",
-     TT "PushforwardComputation", " -- a type of list used internally by ", TO "pushForward", " and ", TO "kernel", "."
-     }
-
 -- document {
 --      Key => EliminationOrder,
---      Headline => "use the natural elmination order in a pushForward1 computation",
+--      Headline => "use the natural elimination order in a pushForward1 computation",
 --      TT "EliminationOrder", " -- a value for the ", TO "MonomialOrder", "
 --      option to ", TO "pushForward1", " which specifies the natural elimination
 --      order be used."
 --      }
-
-
-TEST "
-    R = ZZ/101[a,b]
-    S = ZZ/101[a,b,c]
-    M = cokernel matrix{{c^3}}
-    f = map(S,R)
-    assert( R^{0,-1,-2} == pushForward(f,M) )
-"
-
-document {
-     Key => UseHilbertFunction,
-     TT "UseHilbertFunction", " -- an option for ", TO "pushForward", "."
-     }

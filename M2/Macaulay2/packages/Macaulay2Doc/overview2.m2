@@ -1,12 +1,5 @@
 --		Copyright 1993-1998 by Daniel R. Grayson
 
-///
-
---this is an old node, apparently
-
-
-///
-
 document {
      Key => "making modules from matrices",
      "Let's make some matrices.",
@@ -140,7 +133,10 @@ document {
      the target of ", TT "f", ".",
      EXAMPLE {
 	  "h = resolution inducedMap(M, m^2/m^4)"
-	  }
+	 },
+     Subnodes => {
+	 TO "computing resolutions",
+	 },
      }
 
 document {
@@ -327,35 +323,6 @@ document {
      }
 
 document {
-     Key => "coherent sheaves",
-     "The main reason to implement algebraic varieties is support the
-     computation of sheaf cohomology of coherent sheaves, which doesn't
-     have an immediate description in terms of graded modules.",
-     PARA{},
-     "In this example, we use ", TO "cotangentSheaf", " to produce
-     the cotangent sheaf on a K3 surface and compute its sheaf
-     cohomology.",
-     EXAMPLE {
-	  "R = QQ[a,b,c,d]/(a^4+b^4+c^4+d^4);",
-	  "X = Proj R",
-	  "Omega = cotangentSheaf X",
-	  "HH^1(Omega)",
-	  },
-     "Use the function ", TO "sheaf", " to convert a graded module to 
-     a coherent sheaf, and ", TO "module", " to get the graded module
-     back again.",
-     EXAMPLE {
-	  "F = sheaf coker matrix {{a,b}}",
-	  "module F",
-	  },
-     SeeAlso => {
-	  (cohomology, ZZ, CoherentSheaf),
-	  (cohomology, ZZ, SumOfTwists)
-	  }
-     }
-
-
-document {
      Key => "hashing",
      "A hash table contains a set of key-value pairs.  The access
      functions for hash tables accept a key and retrieve the
@@ -458,96 +425,6 @@ document {
      This provides another argument in favor of taking the second approach listed
      above.",
      SeeAlso => "HashTable"
-     }
-
-document {
-     Key => "mapping over lists",
-     Headline => "apply a function to each element of a list",
-     "In programming, loops that operate on consecutive elements of a
-     list are common, so we offer various ways to apply functions to
-     each of the elements of a list, along with various ways to treat the
-     returned values.",
-     PARA{},
-     "The most basic operation is provided by ", TO "scan", ", which applies
-     a function consecutively to each element of a list, discarding the
-     values returned.",
-     EXAMPLE "scan({a,b,c}, print)",
-     "The keyword ", TO "break", " can be used to terminate the scan
-     prematurely, and optionally to specify a return value for the
-     expression.  Here we use it to locate the first even number in
-     a list.",
-     EXAMPLE {
-	  "scan({3,5,7,11,44,55,77}, i -> if even i then break i)"
-	  },
-     "The function ", TO "apply", " is similar to ", TO "scan", " but
-     will produce a list containing the values returned.",
-     EXAMPLE "apply({1,2,3,4}, i -> i^2)",
-     "This operation is so common that we offer two shorthand notations for
-     it, one with the function on the right and one with the function on
-     the left.",
-     EXAMPLE {
-	  ///{1,2,3,4} / (i -> i^2)///,
-	  ///(i -> i^2) \ {1,2,3,4}///,
-	  },
-     "The associativity of these operators during parsing is set up so the 
-     following code works as one would wish.",
-     EXAMPLE {
-	  ///{1,2,3,4} / (i -> i^2) / (j -> 1000*j)///,
-	  ///(j -> 1000*j) \ (i -> i^2) \ {1,2,3,4}///,
-	  ///(j -> 1000*j) @@ (i -> i^2) \ {1,2,3,4}///,
-	  },
-     "The function ", TO "apply", " can also be used with two lists of the same
-     length, in which case it will apply the function consecutively to
-     corresponding elements of the two lists.",
-     EXAMPLE {
-	  "apply({1,2,3}, {7,8,9}, (i,j) -> 1000*i+j)"
-	  },
-     "The function ", TO "table", " can be used to create a table (doubly
-     nested list) from two lists and a function of two arguments.  It applies
-     the function consecutively to each element from the first list paired
-     with each element from the second list, so the total number of evaluations
-     of the function is the product of the lengths of the two lists.",
-     EXAMPLE {
-	  "table({1,2,3},{7,8},(i,j) -> 1000*i+j)"
-	  },
-     "The function ", TO "applyTable", " can be used to apply a function to 
-     each element of table.",
-     EXAMPLE {
-	  "applyTable( {{1,2,3},{4,5}}, i -> i^2)"
-	  },
-     "We may use ", TO "select", " to select those elements from a list
-     that satisfy some condition.  In the next example, we use the function
-     ", TO "even", " to select the even numbers from a list.",
-     EXAMPLE "select({1,2,3,4,5,6,7,8,9,10}, even)",
-     "An optional first argument to ", TO "select", " allows us to specify the
-     maximum number of elements selected.",
-     EXAMPLE "select(2,{1,2,3,4,5,6,7,8,9,10}, even)",
-     "We may use ", TO "any", " to tell whether there is at least one element of 
-     a list satisfying a condition, and ", TO "all", " to tell whether all 
-     elements satisfy it.",
-     EXAMPLE {
-	  "any({1,2,3,4,5,6,7,8,9,10}, even)",
-	  "all({1,2,3,4,5,6,7,8,9,10}, even)",
-	  },
-     "We can use ", TO "position", " to tell us the position of the first element
-     in a list satisfying a condition.",
-     EXAMPLE {
-	  "position({1,3,5,7,8,9,11,13,15,16},even)",
-	  },
-     "The functions ", TO "fold", " and ", TO "accumulate", " provide various
-     ways to apply a function of two arguments to the elements of a list.  One
-     of the arguments is the next element from the list, and the other argument
-     is the value returned by the previous application of the function.  As an
-     example, suppose we want to convert the list ", TT "{7,3,5,4,2}", " of digits
-     into the corresponding number ", TT "73542", ".  The formula
-     ", TT "(((7*10+3)*10+5)*10+4)+2", " is a fast way to do it that doesn't
-     involve computing high powers of 10 separately.  We can do this with
-     ", TO "fold", " and the following code.",
-     EXAMPLE {
-	  "fold((i,j) -> i*10+j, {7,3,5,4,2})",
-	  },
-     "It is possible to give an additional argument to ", TO "fold", " so
-     that lists of length 0 can be handled correctly."
      }
 
 document {
@@ -699,15 +576,17 @@ document {
      "The command ", TO "needs", " can be used to load a file only if
      it hasn't already been loaded.",
      EXAMPLE ///needs fn///,
-     "For debugging or display purposes, it is sometimes useful to be able 
-     to simulate entering the lines of a file one by one, so they appear
-     on the screen along with prompts and output lines.  We use
-     ", TO "input", " for
-     this.",
-     EXAMPLE ///input fn///,
-     "There are other ways to manipulate the contents of a file with
-     multiple lines.  First, let's use ", TO "peek", " to observe the 
-     extent of this string returned by ", TO "get", ".",
+     PARA {
+	  "For debugging or display purposes, it is sometimes useful to be able 
+	  to simulate entering the lines of a file one by one, so they appear
+	  on the screen along with prompts and output lines.  One may use
+	  ", TO "input", " for that."
+	  -- we don't illustrate the use of 'input' here, because the documentation example parser can't handle it
+	  },
+     PARA {
+	  "There are other ways to manipulate the contents of a file with
+	  multiple lines.  First, let's use ", TO "peek", " to observe the 
+	  extent of this string returned by ", TO "get", "."},
      EXAMPLE ///peek get fn///,
      "The resulting string has newlines in it; we can use ", TO "lines", "
      to break it apart into a list of strings, with one row in each string.",
@@ -1090,7 +969,7 @@ document {
      "The method installed by the code above is automatically inherited by 
      subclasses of ", TT "X", " and ", TT "Y", ".  Here is a brief
      description of the way this works.  Suppose ", TT "X", " is the 
-     ", TO "parent", " of ", TT "P", " and ", TT "Y", " is the parent of ", TT "X", ".  When 
+     ", TO "parent", " of ", TT "P", " and ", TT "Y", " is the parent of ", TT "Q", ".  When
      a sum ", TT "p+q", " is evaluated where the class of ", TT "p", " is 
      ", TT "P", " and the class of ", TT "q", " is ", TT "Q", ", then the binary
      method for ", TT "P+Q", " is applied, unless there isn't one, in which
@@ -1119,7 +998,7 @@ document {
      with",
      PRE "new Z of X from Y := (z,y) -> ...",
      "where ", TT "z", " denotes the new hash table of class ", TT "Z", " and parent
-     ", TT "x", " provided to the routine by the system."
+     ", TT "X", " provided to the routine by the system."
      }
 
 document {

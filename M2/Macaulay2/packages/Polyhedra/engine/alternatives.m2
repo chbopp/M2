@@ -1,9 +1,9 @@
 -- Methods for installing alternative interfaces provided in the alternatives folder.
 
-export{
-   "loadAlternative",
-   "dropAlternatives"
-}
+-- export{
+--    "loadAlternative",
+--    "dropAlternatives"
+-- }
 
 
 loadAlternative = method()
@@ -12,6 +12,7 @@ loadAlternative String := name -> (
    else if name == "lcdd" then insertAlternatives(lcdd)
    else if name == "lcdd_gmp" then insertAlternatives(lcddGmp)
    else if name == "normaliz" then insertAlternatives(normalizPolyhedra)
+   else if name == "4ti2" then insertAlternatives(fourtitwoPolyhedra)
    else error("No such interface.")
 )
 

@@ -2,45 +2,7 @@
 --- author(s): MES
 --- notes: 
 
-undocumented {
-    (toExternalString, Nothing),
-    (toExternalString, Ideal),
-    (toExternalString, Boolean),
-    (toExternalString, LATER),
-    (toExternalString, Number),
-    (toExternalString, Manipulator),
-    (toExternalString, Module),
-    (toExternalString, Sequence),
-    (toExternalString, QuotientRing),
-    (toExternalString, GaloisField),
-    (toExternalString, Array),
-    (toExternalString, Matrix),
-    (toExternalString, GeneralOrderedMonoid),
-    (toExternalString, Thing),
-    (toExternalString, Function),
-    (toExternalString, CC),
-    (toExternalString, HashTable),
-    (toExternalString, MutableHashTable),
-    (toExternalString, Type),
-    (toExternalString, BasicList),
-    (toExternalString, MutableList),
-    (toExternalString, Vector),
-    (toExternalString, Option),
-    (toExternalString, Symbol),
-    (toExternalString, Command),
-    (toExternalString,Constant),
-    (toExternalString,RR),
-    (toString,ComplexField),
-    (toString,Constant),
-    (toString,Expression),
-    (toString,IndexedVariableTable),
-    (toString,RealField),
-    (toExternalString, Hypertext),
-    (toExternalString, Keyword),
-    (toExternalString, PolynomialRing),
-    (toExternalString, Net),
-    (toExternalString, String)
-    }     
+undocumented methods toExternalString
 
 document { 
      Key => toExternalString,

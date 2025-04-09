@@ -41,11 +41,11 @@ smallestFace(Matrix,Cone) := (p,C) -> (
      if contains(C,coneFromVData p) then (
 	  M := halfspaces C;
      	  N := hyperplanes C;
-     	  -- Selecting the half-spaces that fullfil equality for p
+     	  -- Selecting the half-spaces that fulfill equality for p
 	  -- and adding them to the hyperplanes
 	  pos := select(toList(0..(numRows M)-1), i -> (M^{i})*p == 0);
 	  N = N || M^pos;
-	  intersection(M,N))
+	  coneFromHData(M,N))
      else emptyPolyhedron ambDim(C))
 
 -- PURPOSE : Computing the tail cone of a given Polyhedron
@@ -71,7 +71,7 @@ refineCones = L -> (
    F := ccRefinement M;
    -- Collect for each cone of the ccRef the intersection of all original cones, that contain
    -- the interior of that cone
-   fan apply(getProperty(F, honestMaxObjects), 
+   fan apply(values getProperty(F, honestMaxObjects), 
       C -> (
          v := interiorVector(C);
          intersection select(L, c -> contains(c,v))
@@ -111,7 +111,7 @@ imageFan (Matrix,Cone) := (M,C) -> (
 --   INPUT : '(P,Q)',  two polyhedra
 --  OUTPUT : 'C',  a Cone, the inner normal cone of P in the face Q
 -- COMMENT : 'Q' must be a face of P
-normalCone (Polyhedron,Polyhedron) := Cone => opts -> (P,Q) -> (
+normalCone (Polyhedron,Polyhedron) := Cone => {} >> opts -> (P,Q) -> (
      if not P.cache.?normalCone then P.cache.normalCone = new MutableHashTable;
      if not P.cache.normalCone#?Q then (
 	  -- Checking for input errors
@@ -147,7 +147,7 @@ sublatticeBasis Matrix := M -> (
 --     	     to the file. But keep in mind that this works only for such objects assigned to a Symbol! The session 
 -- 	     can be reovered by calling
 --     	     load F
--- 	     It is not neccessary to load Polyhedra before loading the saved session, because if not yet loaded it will
+-- 	     It is not necessary to load Polyhedra before loading the saved session, because if not yet loaded it will
 --     	     load Polyhedra. Also if PPDivisor was loaded when the session has been saved it will also be loaded.
 saveSession = method()
 saveSession String := F -> (

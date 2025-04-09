@@ -3,12 +3,11 @@
 #ifndef _dmat_hpp_
 #define _dmat_hpp_
 
+#include "engine-includes.hpp"
+#include "mat-util.hpp"
+
 #include <algorithm>
 #include <utility>
-
-#include "engine-includes.hpp"
-#include <algorithm>
-#include "mat-util.hpp"
 
 template <typename ACoeffRing>
 class DMat;
@@ -27,8 +26,8 @@ class DMatConstIterator
 
   void operator++() { mCurrent += mStride; }
   const ElementType& operator*() { return *mCurrent; }
-  bool operator==(DMatConstIterator& i) const { return (&(*i) == mCurrent); }
-  bool operator!=(DMatConstIterator& i) const { return (&(*i) != mCurrent); }
+  bool operator==(const DMatConstIterator& i) const { return (&(*i.mCurrent) == mCurrent); }
+  bool operator!=(const DMatConstIterator& i) const { return (&(*i.mCurrent) != mCurrent); }
  private:
   const ElementType* mCurrent;
   size_t mStride;
@@ -76,20 +75,22 @@ class DMat
   typedef ACoeffRing CoeffRing;
   typedef typename ACoeffRing::ElementType ElementType;
   typedef ElementType elem;
+  typedef typename ACoeffRing::Element Element;
 
   typedef DMatIterator<ACoeffRing> Iterator;
   typedef DMatConstIterator<ACoeffRing> ConstIterator;
 
-  DMat() : mRing(0), mNumRows(0), mNumColumns(0), mArray(0) {}
+  DMat() : mRing(nullptr), mNumRows(0), mNumColumns(0), mArray(nullptr) {}
   DMat(const ACoeffRing& R, size_t nrows, size_t ncols)
       : mRing(&R), mNumRows(nrows), mNumColumns(ncols)
   {
     size_t len = mNumRows * mNumColumns;
     if (len == 0)
-      mArray = 0;
+      mArray = nullptr;
     else
       {
-        mArray = new ElementType[len];
+        mArray = newarray(ElementType,len);
+        //        mArray = new ElementType[len];
         for (size_t i = 0; i < len; i++)
           {
             ring().init(mArray[i]);
@@ -102,10 +103,11 @@ class DMat
   {
     size_t len = mNumRows * mNumColumns;
     if (len == 0)
-      mArray = 0;
+      mArray = nullptr;
     else
       {
-        mArray = new ElementType[len];
+        mArray = newarray(ElementType,len);
+        //        mArray = new ElementType[len];
         for (size_t i = 0; i < len; i++)
           ring().init_set(mArray[i], M.array()[i]);
       }
@@ -114,7 +116,8 @@ class DMat
   {
     size_t len = mNumRows * mNumColumns;
     for (size_t i = 0; i < len; i++) ring().clear(mArray[i]);
-    if (mArray != 0) delete[] mArray;
+    //    if (mArray != 0) delete[] mArray;
+    if (mArray != nullptr) freemem(mArray);
   }
 
   // swap the actual matrices of 'this' and 'M'.

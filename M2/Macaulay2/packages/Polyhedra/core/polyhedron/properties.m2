@@ -49,8 +49,11 @@ compute#Polyhedron#rays Polyhedron := P -> (
 
 compute#Polyhedron#computedDimension = method()
 compute#Polyhedron#computedDimension Polyhedron := P -> (
-   C := getProperty(P, underlyingCone);
-   dim C - 1
+   if isEmpty P then
+      return -1
+   else
+      C := getProperty(P, underlyingCone);
+      dim C - 1
 )
 
 
@@ -116,7 +119,7 @@ compute#Polyhedron#underlyingCone Polyhedron := P -> (
       result = append(result, equations => pMat);
    );
    resultHash := new HashTable from result;
-   cone resultHash
+   internalConeConstructor resultHash
 )
 
 
@@ -274,7 +277,14 @@ compute#Polyhedron#simplicial Polyhedron := P -> (
    vertP := vertices P;
    raysP := rays P;
    linP := linealitySpace P;
-   facetsP = apply(facetsP, f->(vertP_(f#0) | raysP_(f#1) | linP));
+   facetsP = apply(facetsP, f->(
+         A := vertP_(f#0);
+         A = matrix {toList ((numColumns A):1/1)} || A;
+         B := raysP_(f#1) | linP;
+         B = matrix {toList ((numColumns B):0/1)} || B;
+         A | B
+      )
+   );
    all(facetsP, m -> numColumns m == rank m)
 )
 

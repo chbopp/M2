@@ -1,12 +1,8 @@
--- -*- M2-comint -*- hash: 142020468
---loading configuration for package "FourTiTwo" from file /Users/dan/Library/Application Support/Macaulay2/init-FourTiTwo.m2
---loading configuration for package "gfanInterface" from file /Users/dan/Library/Application Support/Macaulay2/init-gfanInterface.m2
---loading configuration for package "Tropical" from file /Users/dan/Library/Application Support/Macaulay2/init-Tropical.m2
--- polymake is installed
+-- -*- M2-comint -*- hash: 13296701600135843700
 
 i1 : QQ[x,y,z]
 
-o1 = QQ[x, y, z]
+o1 = QQ[x..z]
 
 o1 : PolynomialRing
 

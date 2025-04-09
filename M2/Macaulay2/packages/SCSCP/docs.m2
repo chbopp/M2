@@ -6,7 +6,10 @@ export { "SCSCPConnection", "newConnection", "startServer", "RemoteObject" }
 beginDocumentation()
 document { 
 	Key => SCSCP,
-	Headline => "SCSCP (Symbolic Computation Software Composability Protocol) support"
+	Headline => "SCSCP (Symbolic Computation Software Composability Protocol) support",
+	"This package provides an ",
+	HREF("https://openmath.org/standard/scscp/", "SCSCP"), " (Symbolic ",
+	"Computation Software Composability Protocol) server and client."
 	}
 
 document {
@@ -71,9 +74,9 @@ document {
 		"host" => String => {"The IP address of the interface to bind to (may be omitted, and defaults to binding to all interfaces) "}, 
 		"port" => {ofClass{String, ZZ}, ", providing the port number (defaults to 26133) "}
 	},
-	"The server will keep running indefinitely; it may be stoppend by sending a Ctrl-C. Furthermore,
+	"The server will keep running indefinitely; it may be stopped by sending a Ctrl-C. Furthermore,
 	the server forks for every new incoming connection, so that it can serve many clients simultaneously.
-	The amount of output printed to the screen is determined by the vaule of debugLevel.",
+	The amount of output printed to the screen is determined by the value of debugLevel.",
 	EXAMPLE { PRE ///
 i1 : debugLevel = 2;
 

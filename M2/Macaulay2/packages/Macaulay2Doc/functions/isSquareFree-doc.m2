@@ -3,7 +3,10 @@
 --- notes: 
 
 document { 
-     Key => {isSquareFree, (isSquareFree,MonomialIdeal)},
+     Key => {isSquareFree,
+	 (isSquareFree, MonomialIdeal),
+	 (isSquareFree, Ideal),
+	 (isSquareFree, Module)},
      Headline => "whether something is square free monomial ideal",
      Usage => "isSquareFree I",
      Inputs => {
@@ -38,5 +41,5 @@ document {
 	  },
      PARA{},
      "Implemented by Greg Smith.",	       
-     SeeAlso => {radical, associatedPrimes, "SimplicialComplexes::SimplicialComplexes"}
+     SeeAlso => {"MinimalPrimes::radical", "PrimaryDecomposition::associatedPrimes", "SimplicialComplexes::SimplicialComplexes"}
      }

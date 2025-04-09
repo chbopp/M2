@@ -1,8 +1,8 @@
 
 
 
-{*
-deflate(WSet, Point) := o -> (W,P) -> deflate(W,jacobianRank(polySystem W,P),{P},o)
+-*
+deflate(WSet, AbstractPoint) := o -> (W,P) -> deflate(W,jacobianRank(polySystem W,P),{P},o)
 deflate(WSet, ZZ) := o -> (W,r) -> deflate(W,r,points W,o)
 deflate(WSet, ZZ, List) := o -> (W,r,pts) -> (
     F := polySystem W;
@@ -14,17 +14,17 @@ deflate(WSet, ZZ, List) := o -> (W,r,pts) -> (
     proxyWSet(W0,M,slicingVariety W)
     )
 deflate(ProxyWSet, ZZ) := o -> (W,r) -> deflate(polySystem W,r,o)
-deflate(ProxyWSet, Point) := o -> (W,P) -> (
+deflate(ProxyWSet, AbstractPoint) := o -> (W,P) -> (
     D := deflate(proxyWSet W,P,o);
     proxyWSet(upWSet D,compose(map W, map D),slicingVariety W)
     )
-*}
+*-
 
 --deflationSequence = method()
 --deflationSequence (WSet,P) 
 
 jacobianRank = method()
-jacobianRank(PolySystem, Point) := (F,P) -> (
+jacobianRank(PolySystem, AbstractPoint) := (F,P) -> (
     J := evaluate(jacobian F, P);
     numericalRank J
     )
@@ -42,8 +42,8 @@ deflatedWSet(Ideal,Ideal,ZZ,List) := (F,S,m,pts) -> (
     -- TO DO: make the above robust... precondition, refine when lifting, ???
     --        Is there a way to detect an incorrectly computed numerical rank?
     for wpts in P list (
-	F0 := (first wpts).LiftedSystem;
-	wpts0 := apply(wpts, p->p.LiftedPoint);
+	F0 := (first wpts).cache.LiftedSystem;
+	wpts0 := apply(wpts, p->p.cache.LiftedPoint);
 	W0 := witnessSet(ideal F0,S,wpts0);
 	A := affineSpace ring F;
 	--M := coordinateProjection(ambient F, ambient F0);
@@ -56,7 +56,6 @@ deflatedWSet(Ideal,Ideal,ZZ,List) := (F,S,m,pts) -> (
     )
 
 TEST ///
-restart
 debug needsPackage "NumericalAlgebraicGeometry"
 CC[x_0..x_3]
 A = matrix{{x_0,x_1,x_2},{x_1,x_2,x_3},{x_2,x_3,0}}

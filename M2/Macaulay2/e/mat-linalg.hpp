@@ -3,11 +3,11 @@
 #ifndef _mat_linalg_hpp_
 #define _mat_linalg_hpp_
 
+
 /**
  * \ingroup matrices
  */
 
-#include <iostream>
 #include "util.hpp"
 #include "exceptions.hpp"
 #include "dmat.hpp"
@@ -50,13 +50,23 @@ typedef DMat<M2::ARingCC> DMatCC;
 #include "dmat-lu.hpp"
 #include "dmat-qq-interface-flint.hpp"
 
+#include "eigen.hpp"
+
 // The following needs to be included before any flint files are included.
 #include <M2/gc-include.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <flint/fmpz_mat.h>
+#include <flint/flint.h>        // for fmpq_numref, fmpz_t
+#include <flint/fmpq_mat.h>     // for fmpq_mat_mul, fmpq_mat_add
+#include <flint/fmpz.h>         // for fmpz_is_pm1, fmpz_clear, fmpz...
+#include <flint/fmpz_mat.h>     // for fmpz_mat_t, fmpz_mat_mul, fmpz_mat_clear
+#include <flint/fq_nmod_mat.h>  // for fq_nmod_mat_mul, fq_zech_mat_mul
+#include <flint/nmod_mat.h>     // for nmod_mat_mul, nmod_mat_add
 #pragma GCC diagnostic pop
+
+#include <iostream>
+#include <algorithm>
 
 namespace MatrixOps {
 /// @brief the rank of a matrix
@@ -189,7 +199,7 @@ bool solveInvertible(const Mat& A, const Mat& B, Mat& X)
 /// the column profile is computed.
 ///
 /// The return value is an ascending sequence of non-negative integers
-/// with an entry a occuring iff the submatrix of A of the first
+/// with an entry a occurring iff the submatrix of A of the first
 /// (a-1) rows (resp columns) has lower rank than the submatrix of the
 /// first a rows (resp columns).
 ///
@@ -204,7 +214,7 @@ M2_arrayintOrNull rankProfile(const Mat& A, bool row_profile)
 
 /// @brief Set C += A*B
 ///
-/// Throws an exception if not yet implementd for this ring/matrix type.
+/// Throws an exception if not yet implemented for this ring/matrix type.
 /// The sizes of C,A,B must be compatible.  These are checked only via
 /// assertions.
 template <typename Mat>
@@ -217,7 +227,7 @@ void addMultipleTo(Mat& C, const Mat& A, const Mat& B)
 
 /// @brief Set C -= A*B
 ///
-/// Throws an exception if not yet implementd for this ring/matrix type.
+/// Throws an exception if not yet implemented for this ring/matrix type.
 /// The sizes of C,A,B must be compatible.  These are checked only via
 /// assertions.
 template <typename Mat>
@@ -234,6 +244,21 @@ M2_arrayintOrNull LU(const Mat& A, Mat& L, Mat& U)
 {
   throw exc::engine_error(
       "'LU' not implemented for this kind of matrix over this ring");
+}
+
+template <typename Mat>
+M2_arrayintOrNull LUincremental(std::vector<size_t>& P, Mat& LU, const Mat& v, int i)
+{
+  throw exc::engine_error(
+      "'LUincremental' not implemented for this kind of matrix over this ring");
+}
+
+template <typename Mat>
+void triangularSolve(Mat& Lv, Mat& x, int m, int strategy)
+{
+  throw exc::engine_error(
+      "'triangularSolve' not implemented for this kind of matrix over this "
+      "ring");
 }
 
 template <typename Mat, typename Mat2>
@@ -293,7 +318,7 @@ void clean(gmp_RR epsilon, T& mat)
 }
 
 template <typename T>
-void increase_norm(gmp_RR& nm, const T& mat)
+void increase_norm(gmp_RRmutable nm, const T& mat)
 {
   throw exc::engine_error(
       "'norm' not implemented for this kind of matrix over this ring");
@@ -316,8 +341,7 @@ void mult(const DMat<RT>& A, const DMat<RT>& B, DMat<RT>& result_product)
 
   ElementType* result = result_product.array();
 
-  ElementType tmp;
-  A.ring().init(tmp);
+  typename RT::Element tmp(A.ring());
   // WARNING: this routine expects the result matrix to be in ROW MAJOR ORDER
   for (size_t i = 0; i < A.numRows(); i++)
     for (size_t j = 0; j < B.numColumns(); j++)
@@ -335,7 +359,6 @@ void mult(const DMat<RT>& A, const DMat<RT>& B, DMat<RT>& result_product)
           }
         result++;
       }
-  A.ring().clear(tmp);
 }
 
 template <typename RT>
@@ -358,8 +381,7 @@ void subtractMultipleTo(DMat<RT>& C, const DMat<RT>& A, const DMat<RT>& B)
 
   ElementType* result = C.array();
 
-  ElementType tmp;
-  A.ring().init(tmp);
+  typename RT::Element tmp(A.ring());
   // WARNING: this routine expects the result matrix to be in ROW MAJOR ORDER
   for (size_t i = 0; i < A.numRows(); i++)
     for (size_t j = 0; j < B.numColumns(); j++)
@@ -377,7 +399,6 @@ void subtractMultipleTo(DMat<RT>& C, const DMat<RT>& A, const DMat<RT>& B)
           }
         result++;
       }
-  A.ring().clear(tmp);
 }
 
 // Note: this default version only works for fields.  Any other rings
@@ -396,6 +417,110 @@ inline M2_arrayintOrNull LU(const DMat<RT>& A, DMat<RT>& L, DMat<RT>& U)
   DMatLinAlg<RT> LUdecomp(A);
   LUdecomp.matrixPLU(perm, L, U);
   return stdvector_to_M2_arrayint(perm);
+}
+
+/*
+  Cases for strategy:
+  00 lower triangular (forward substitution)
+  01 lower triangular, assume 1 on diagonal
+  10 upper triangular (backward substitution)
+  11 upper triangular, assume 1 on diagonal
+  Note: the rest of the matrix need not be 0 filled.
+*/
+template <typename RT>
+void triangularSolve(DMat<RT>& Lv, DMat<RT>& x, int m, int strategy)
+{
+  // TODO: check rings match
+  // TODO: no divide by zero
+  // TODO: size of matrices
+  // TODO: add tests
+  // TODO: for size 0 also
+  switch (strategy)
+    {
+      case 0:
+        // TODO: change to iter
+        for (size_t i = 0; i < m; i++)
+          {
+            auto& a = x.entry(i, 0);
+            x.ring().divide(a, Lv.entry(i, m), Lv.entry(i, i));
+            x.ring().negate(a, a);
+            MatElementaryOps<DMat<RT>>::column_op(Lv, m, a, i);
+            x.ring().negate(a, a);
+          }
+        break;
+      case 1:
+        // TODO: change to iter
+        for (size_t i = 0; i < m; i++)
+          {
+            auto& a = x.entry(i, 0);
+            x.ring().negate(a, Lv.entry(i, m));
+            MatElementaryOps<DMat<RT>>::column_op(Lv, m, a, i);
+            x.ring().negate(a, a);
+          }
+        break;
+      case 2:
+        // TODO: change to iter
+        for (size_t i = 1; i < m + 1; i++)
+          {
+            auto& a = x.entry(m - i, 0);
+            x.ring().divide(a, Lv.entry(m - i, m), Lv.entry(m - i, m - i));
+            x.ring().negate(a, a);
+            MatElementaryOps<DMat<RT>>::column_op(Lv, m, a, m - i);
+            x.ring().negate(a, a);
+          }
+        break;
+      case 3:
+        // TODO: change to iter
+        for (size_t i = 1; i < m + 1; i++)
+          {
+            auto& a = x.entry(m - i, 0);
+            x.ring().negate(a, Lv.entry(m - i, m));
+            MatElementaryOps<DMat<RT>>::column_op(Lv, m, a, m - i);
+            x.ring().negate(a, a);
+          }
+        break;
+    }
+}
+
+template <typename RT>
+M2_arrayintOrNull LUincremental(std::vector<size_t>& P, DMat<RT>& LU, const DMat<RT>& v, int m)
+{
+  size_t n = LU.numRows();
+
+  // copy permuted v to m-th column of LU
+  // TODO: change to iter
+  for (size_t j = 0; j < n; j++)
+    LU.ring().set(LU.entry(j, m), v.entry(P[j], 0));
+
+  // reduce the m-th column of LU and forward solve
+  DMat<RT> x{LU.ring(), n, 1};
+  triangularSolve(LU, x, m, 1);
+  // place solution of forward solve in U
+  // TODO: change to iter
+  for (size_t i = 0; i < m; i++)
+    LU.ring().set(LU.entry(i, m), x.entry(i, 0));
+
+  // look for a pivot in L
+  int pivotPosition = -1;
+  // TODO: change to iter
+  for (size_t j = m; j < n; j++)
+    if (!LU.ring().is_zero(LU.entry(j, m)))
+      {
+        pivotPosition = j;
+        break;
+      }
+  // if no pivot found, return
+  if (pivotPosition == -1) return stdvector_to_M2_arrayint(P);
+  // otherwise swap rows and update P
+  MatElementaryOps<DMat<RT>>::interchange_rows(LU, pivotPosition, m);
+  std::swap(P[pivotPosition], P[m]);
+
+  // scale column of L
+  // TODO: change to iter
+  for (int j = m + 1; j < n; j++)
+    LU.ring().divide(LU.entry(j, m), LU.entry(j, m), LU.entry(m, m));
+
+  return stdvector_to_M2_arrayint(P);
 }
 
 template <typename RT>
@@ -589,11 +714,9 @@ inline void determinant(const DMatZZ& A, M2::ARingZZ::ElementType& result_det)
 
 inline bool inverse(const DMatZZ& A, DMatZZ& result_inv)
 {
-  DMatZZ::ElementType den;
-  A.ring().init(den);
-  bool result = fmpz_mat_inv(result_inv.fmpz_mat(), &den, A.fmpz_mat());
-  if (!fmpz_is_pm1(&den)) result = false;
-  A.ring().clear(den);
+  M2::ARingZZ::Element den(A.ring());
+  bool result = fmpz_mat_inv(result_inv.fmpz_mat(), &den.value(), A.fmpz_mat());
+  if (!fmpz_is_pm1(&den.value())) result = false;
   return result;
 }
 
@@ -613,11 +736,9 @@ inline size_t nullSpace(const DMatZZ& A, DMatZZ& result_nullspace)
 
 inline bool solveLinear(const DMatZZ& A, const DMatZZ& B, DMatZZ& X)
 {
-  DMatZZ::ElementType den;
-  A.ring().init(den);
-  bool result = fmpz_mat_solve(X.fmpz_mat(), &den, B.fmpz_mat(), A.fmpz_mat());
-  if (!fmpz_is_pm1(&den)) result = false;
-  A.ring().clear(den);
+  M2::ARingZZ::Element den(A.ring());
+  bool result = fmpz_mat_solve(X.fmpz_mat(), &den.value(), B.fmpz_mat(), A.fmpz_mat());
+  if (!fmpz_is_pm1(&den.value())) result = false;
   return result;
 }
 
@@ -743,7 +864,11 @@ inline size_t rowReducedEchelonForm(const DMatGFFlintBig& A,
                                     DMatGFFlintBig& result_rref)
 {
   DMatGFFlintBig A1(A);
+#if __FLINT_RELEASE >= 30100
+  long rank = fq_nmod_mat_rref(A1.fq_nmod_mat(), A1.fq_nmod_mat(), A.ring().flintContext());
+#else
   long rank = fq_nmod_mat_rref(A1.fq_nmod_mat(), A.ring().flintContext());
+#endif
   result_rref.swap(A1);
   return rank;
 }
@@ -804,7 +929,11 @@ inline size_t rowReducedEchelonForm(const DMatGFFlint& A,
                                     DMatGFFlint& result_rref)
 {
   DMatGFFlint A1(A);
+#if __FLINT_RELEASE >= 30100
+  long rank = fq_zech_mat_rref(A1.fq_zech_mat(), A1.fq_zech_mat(), A.ring().flintContext());
+#else
   long rank = fq_zech_mat_rref(A1.fq_zech_mat(), A.ring().flintContext());
+#endif
   result_rref.swap(A1);
   return rank;
 }
@@ -873,7 +1002,7 @@ inline size_t rank(const DMatQQFlint& A)
   // that matrix.
   fmpz_mat_t m1;
   fmpz_mat_init(m1, A.numRows(), A.numColumns());
-  fmpq_mat_get_fmpz_mat_rowwise(m1, NULL, A.fmpq_mat());
+  fmpq_mat_get_fmpz_mat_rowwise(m1, nullptr, A.fmpq_mat());
   // fmpz_mat_print_pretty(m1);
   size_t rk = fmpz_mat_rank(m1);
   fmpz_mat_clear(m1);
@@ -903,7 +1032,7 @@ inline size_t nullSpace(const DMatQQFlint& A, DMatQQFlint& result_nullspace)
   fmpz_mat_t m2;
   fmpz_mat_init(m1, A.numRows(), A.numColumns());
   fmpz_mat_init(m2, A.numColumns(), A.numColumns());
-  fmpq_mat_get_fmpz_mat_rowwise(m1, NULL, A.fmpq_mat());
+  fmpq_mat_get_fmpz_mat_rowwise(m1, nullptr, A.fmpq_mat());
   // fmpz_mat_print_pretty(m1);
   size_t nullity = fmpz_mat_nullspace(m2, m1);
   // now copy the first 'nullity' columns into result_nullspace
@@ -969,45 +1098,73 @@ inline void mult(const DMatQQFlint& A,
 ////////
 inline bool eigenvaluesHermitian(const DMatRR& A, DMatRR& eigenvals)
 {
+#ifndef NO_LAPACK
   return Lapack::eigenvalues_symmetric(&A, &eigenvals);
+#else
+  return EigenM2::eigenvalues_hermitian(&A, &eigenvals);
+#endif
 }
 
 inline bool eigenvalues(const DMatRR& A, DMatCC& eigenvals)
 {
+#ifndef NO_LAPACK
   return Lapack::eigenvalues(&A, &eigenvals);
+#else
+  return EigenM2::eigenvalues(&A, &eigenvals);
+#endif
 }
 
 inline bool eigenvectorsHermitian(const DMatRR& A,
-                                  DMatRR& eigenvals,
-                                  DMatRR& eigenvecs)
+  DMatRR& eigenvals,
+  DMatRR& eigenvecs)
 {
+#ifndef NO_LAPACK
   return Lapack::eigenvectors_symmetric(&A, &eigenvals, &eigenvecs);
+#else
+  return EigenM2::eigenvectors_hermitian(&A, &eigenvals, &eigenvecs);
+#endif
 }
 
 inline bool eigenvectors(const DMatRR& A, DMatCC& eigenvals, DMatCC& eigenvecs)
 {
+#ifndef NO_LAPACK
   return Lapack::eigenvectors(&A, &eigenvals, &eigenvecs);
+#else
+  return EigenM2::eigenvectors(&A, &eigenvals, &eigenvecs);
+#endif
 }
 
 inline bool leastSquares(const DMatRR& A,
-                         const DMatRR& B,
-                         DMatRR& X,
-                         bool assume_full_rank)
+  const DMatRR& B,
+  DMatRR& X,
+  bool assume_full_rank)
 {
+#ifndef NO_LAPACK
   if (assume_full_rank)
     return Lapack::least_squares(&A, &B, &X);
   else
     return Lapack::least_squares_deficient(&A, &B, &X);
+#else
+  // place eigen code here
+  return EigenM2::least_squares(&A, &B, &X);
+  // throw exc::engine_error( "not implemented!!!");
+  // return false; // indicates error
+#endif
 }
 
 inline bool SVD(const DMatRR& A,
-                DMatRR& Sigma,
-                DMatRR& U,
-                DMatRR& Vt,
-                int strategy)
+  DMatRR& Sigma,
+  DMatRR& U,
+  DMatRR& Vt,
+  int strategy)
 {
+#ifndef NO_LAPACK
   if (strategy == 1) return Lapack::SVD_divide_conquer(&A, &Sigma, &U, &Vt);
   return Lapack::SVD(&A, &Sigma, &U, &Vt);
+#else
+  if (strategy == 1) return EigenM2::SVD_divide_conquer(&A, &Sigma, &U, &Vt);
+  return EigenM2::SVD(&A, &Sigma, &U, &Vt);
+#endif
 }
 
 inline bool QR(const DMatRR& A, DMatRR& Q, DMatRR& R, bool return_QR)
@@ -1027,7 +1184,7 @@ inline void clean(gmp_RR epsilon, DMatRR& mat)
   for (size_t i = 0; i < len; i++, ++p) mat.ring().zeroize_tiny(epsilon, *p);
 }
 
-inline void increase_norm(gmp_RR& norm, const DMatRR& mat)
+inline void increase_norm(gmp_RRmutable norm, const DMatRR& mat)
 {
   auto p = mat.array();
   size_t len = mat.numRows() * mat.numColumns();
@@ -1039,45 +1196,70 @@ inline void increase_norm(gmp_RR& norm, const DMatRR& mat)
 ////////
 inline bool eigenvaluesHermitian(const DMatCC& A, DMatRR& eigenvals)
 {
+#ifndef NO_LAPACK
   return Lapack::eigenvalues_hermitian(&A, &eigenvals);
+#else
+  return EigenM2::eigenvalues_hermitian(&A, &eigenvals);
+#endif
 }
 
 inline bool eigenvalues(const DMatCC& A, DMatCC& eigenvals)
 {
+#ifndef NO_LAPACK
   return Lapack::eigenvalues(&A, &eigenvals);
+#else
+  return EigenM2::eigenvalues(&A, &eigenvals);
+#endif
 }
 
 inline bool eigenvectorsHermitian(const DMatCC& A,
-                                  DMatRR& eigenvals,
-                                  DMatCC& eigenvecs)
+  DMatRR& eigenvals,
+  DMatCC& eigenvecs)
 {
+#ifndef NO_LAPACK
   return Lapack::eigenvectors_hermitian(&A, &eigenvals, &eigenvecs);
+#else
+  return EigenM2::eigenvectors_hermitian(&A, &eigenvals, &eigenvecs);
+#endif
 }
 
 inline bool eigenvectors(const DMatCC& A, DMatCC& eigenvals, DMatCC& eigenvecs)
 {
+#ifndef NO_LAPACK
   return Lapack::eigenvectors(&A, &eigenvals, &eigenvecs);
+#else
+  return EigenM2::eigenvectors(&A, &eigenvals, &eigenvecs);
+#endif
 }
 
 inline bool leastSquares(const DMatCC& A,
-                         const DMatCC& B,
-                         DMatCC& X,
-                         bool assume_full_rank)
+  const DMatCC& B,
+  DMatCC& X,
+  bool assume_full_rank)
 {
+#ifndef NO_LAPACK
   if (assume_full_rank)
     return Lapack::least_squares(&A, &B, &X);
   else
     return Lapack::least_squares_deficient(&A, &B, &X);
+#else
+  return EigenM2::least_squares(&A, &B, &X);
+#endif
 }
 
 inline bool SVD(const DMatCC& A,
-                DMatRR& Sigma,
-                DMatCC& U,
-                DMatCC& Vt,
-                int strategy)
+  DMatRR& Sigma,
+  DMatCC& U,
+  DMatCC& Vt,
+  int strategy)
 {
+#ifndef NO_LAPACK
   if (strategy == 1) return Lapack::SVD_divide_conquer(&A, &Sigma, &U, &Vt);
   return Lapack::SVD(&A, &Sigma, &U, &Vt);
+#else
+  if (strategy == 1) return EigenM2::SVD_divide_conquer(&A, &Sigma, &U, &Vt);
+  return EigenM2::SVD(&A, &Sigma, &U, &Vt);
+#endif
 }
 
 inline void clean(gmp_RR epsilon, DMatCC& mat)
@@ -1087,7 +1269,7 @@ inline void clean(gmp_RR epsilon, DMatCC& mat)
   for (size_t i = 0; i < len; i++, ++p) mat.ring().zeroize_tiny(epsilon, *p);
 }
 
-inline void increase_norm(gmp_RR& norm, const DMatCC& mat)
+inline void increase_norm(gmp_RRmutable norm, const DMatCC& mat)
 {
   auto p = mat.array();
   size_t len = mat.numRows() * mat.numColumns();
@@ -1100,47 +1282,44 @@ inline void increase_norm(gmp_RR& norm, const DMatCC& mat)
 
 inline bool eigenvaluesHermitian(const DMatRRR& A, DMatRRR& eigenvals)
 {
-  return Lapack::eigenvalues_symmetric(&A, &eigenvals);
+  return EigenM2::eigenvalues_hermitian(&A, &eigenvals);
 }
 
 inline bool eigenvalues(const DMatRRR& A, DMatCCC& eigenvals)
 {
-  return Lapack::eigenvalues(&A, &eigenvals);
+  return EigenM2::eigenvalues(&A, &eigenvals);
 }
 
 inline bool eigenvectorsHermitian(const DMatRRR& A,
-                                  DMatRRR& eigenvals,
-                                  DMatRRR& eigenvecs)
+  DMatRRR& eigenvals,
+  DMatRRR& eigenvecs)
 {
-  return Lapack::eigenvectors_symmetric(&A, &eigenvals, &eigenvecs);
+  return EigenM2::eigenvectors_hermitian(&A, &eigenvals, &eigenvecs);
 }
 
 inline bool eigenvectors(const DMatRRR& A,
-                         DMatCCC& eigenvals,
-                         DMatCCC& eigenvecs)
+  DMatCCC& eigenvals,
+  DMatCCC& eigenvecs)
 {
-  return Lapack::eigenvectors(&A, &eigenvals, &eigenvecs);
+  return EigenM2::eigenvectors(&A, &eigenvals, &eigenvecs);
 }
 
 inline bool leastSquares(const DMatRRR& A,
-                         const DMatRRR& B,
-                         DMatRRR& X,
-                         bool assume_full_rank)
+  const DMatRRR& B,
+  DMatRRR& X,
+  bool assume_full_rank)
 {
-  if (assume_full_rank)
-    return Lapack::least_squares(&A, &B, &X);
-  else
-    return Lapack::least_squares_deficient(&A, &B, &X);
+  return EigenM2::least_squares(&A, &B, &X);
 }
 
 inline bool SVD(const DMatRRR& A,
-                DMatRRR& Sigma,
-                DMatRRR& U,
-                DMatRRR& Vt,
-                int strategy)
+  DMatRRR& Sigma,
+  DMatRRR& U,
+  DMatRRR& Vt,
+  int strategy)
 {
-  if (strategy == 1) return Lapack::SVD_divide_conquer(&A, &Sigma, &U, &Vt);
-  return Lapack::SVD(&A, &Sigma, &U, &Vt);
+  if (strategy == 1) return EigenM2::SVD_divide_conquer(&A, &Sigma, &U, &Vt);
+  return EigenM2::SVD(&A, &Sigma, &U, &Vt);
 }
 
 inline void clean(gmp_RR epsilon, DMatRRR& mat)
@@ -1150,7 +1329,7 @@ inline void clean(gmp_RR epsilon, DMatRRR& mat)
   for (size_t i = 0; i < len; i++, ++p) mat.ring().zeroize_tiny(epsilon, *p);
 }
 
-inline void increase_norm(gmp_RR& norm, const DMatRRR& mat)
+inline void increase_norm(gmp_RRmutable norm, const DMatRRR& mat)
 {
   auto p = mat.array();
   size_t len = mat.numRows() * mat.numColumns();
@@ -1163,47 +1342,44 @@ inline void increase_norm(gmp_RR& norm, const DMatRRR& mat)
 
 inline bool eigenvaluesHermitian(const DMatCCC& A, DMatRRR& eigenvals)
 {
-  return Lapack::eigenvalues_hermitian(&A, &eigenvals);
+  return EigenM2::eigenvalues_hermitian(&A, &eigenvals);
 }
 
 inline bool eigenvalues(const DMatCCC& A, DMatCCC& eigenvals)
 {
-  return Lapack::eigenvalues(&A, &eigenvals);
+  return EigenM2::eigenvalues(&A, &eigenvals);
 }
 
 inline bool eigenvectorsHermitian(const DMatCCC& A,
-                                  DMatRRR& eigenvals,
-                                  DMatCCC& eigenvecs)
+  DMatRRR& eigenvals,
+  DMatCCC& eigenvecs)
 {
-  return Lapack::eigenvectors_hermitian(&A, &eigenvals, &eigenvecs);
+  return EigenM2::eigenvectors_hermitian(&A, &eigenvals, &eigenvecs);
 }
 
 inline bool eigenvectors(const DMatCCC& A,
-                         DMatCCC& eigenvals,
-                         DMatCCC& eigenvecs)
+  DMatCCC& eigenvals,
+  DMatCCC& eigenvecs)
 {
-  return Lapack::eigenvectors(&A, &eigenvals, &eigenvecs);
+  return EigenM2::eigenvectors(&A, &eigenvals, &eigenvecs);
 }
 
 inline bool leastSquares(const DMatCCC& A,
-                         const DMatCCC& B,
-                         DMatCCC& X,
-                         bool assume_full_rank)
+  const DMatCCC& B,
+  DMatCCC& X,
+  bool assume_full_rank)
 {
-  if (assume_full_rank)
-    return Lapack::least_squares(&A, &B, &X);
-  else
-    return Lapack::least_squares_deficient(&A, &B, &X);
+  return EigenM2::least_squares(&A, &B, &X);
 }
 
 inline bool SVD(const DMatCCC& A,
-                DMatRRR& Sigma,
-                DMatCCC& U,
-                DMatCCC& Vt,
-                int strategy)
+  DMatRRR& Sigma,
+  DMatCCC& U,
+  DMatCCC& Vt,
+  int strategy)
 {
-  if (strategy == 1) return Lapack::SVD_divide_conquer(&A, &Sigma, &U, &Vt);
-  return Lapack::SVD(&A, &Sigma, &U, &Vt);
+  if (strategy == 1) return EigenM2::SVD_divide_conquer(&A, &Sigma, &U, &Vt);
+  return EigenM2::SVD(&A, &Sigma, &U, &Vt);
 }
 
 inline void clean(gmp_RR epsilon, DMatCCC& mat)
@@ -1213,13 +1389,13 @@ inline void clean(gmp_RR epsilon, DMatCCC& mat)
   for (size_t i = 0; i < len; i++, ++p) mat.ring().zeroize_tiny(epsilon, *p);
 }
 
-inline void increase_norm(gmp_RR& norm, const DMatCCC& mat)
+inline void increase_norm(gmp_RRmutable norm, const DMatCCC& mat)
 {
   auto p = mat.array();
   size_t len = mat.numRows() * mat.numColumns();
   for (size_t i = 0; i < len; i++, ++p) mat.ring().increase_norm(norm, *p);
 }
-};
+};  // namespace MatrixOps
 
 #endif
 

@@ -57,9 +57,6 @@ value
 #ifdef MPWC
 char errfmt  [] = "    File \"%s\"; Line %d # Column %d: %s\n";
 char errfmtnc[] = "    File \"%s\"; Line %d # %s\n";
-#elif defined(_WIN32) && !defined(__CYGWIN32__)
-char errfmt  [] = "%s(%d) : column %d : %s\n";
-char errfmtnc[] = "%s(%d) : %s\n";
 #else
 char errfmt  [] = "%s:%d:%d: %s\n";
 char errfmtnc[] = "%s:%d: %s\n";
@@ -180,6 +177,23 @@ static void checkURL(char *s0) {
     /* relative path */
     s = concat(Dirname,s);
   }
+
+  /* decode percent-encoded url's */
+  int i, j;
+  for (i = 0, j = 0;; i++, j++) {
+    if (s[i] == '%') {
+      char tmp[3];
+      tmp[0] = s[++i];
+      tmp[1] = s[++i];
+      tmp[2] = '\0';
+      s[j] = strtol(tmp, NULL, 16);
+    } else {
+      s[j] = s[i];
+      if (s[j] == '\0')
+	break;
+    }
+  }
+
   if (-1 == access(s, R_OK)) demangle_error("broken link",s0);
 }
 

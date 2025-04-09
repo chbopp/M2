@@ -2,7 +2,7 @@
 use actors;
 use actors2;
 
-header "#include \"../e/engine.h\"";
+header "#include <interface/random.h>";
 
 getParsing(e:Expr):Expr := (
      when e
@@ -12,42 +12,6 @@ getParsing(e:Expr):Expr := (
 	  list( toExpr(x.precedence), toExpr(x.binaryStrength), toExpr(x.unaryStrength)))
      else nullE);
 setupfun("getParsing",getParsing);
-dumpdatafun(e:Expr):Expr := (
-     when e
-     is s:stringCell do (
-	  o := stdIO.insize;
-	  p := stdIO.eof;
-	  q := stdIO.inindex;
-	  stdIO.insize = 0;
-	  stdIO.eof = false;
-	  stdIO.inindex = 0;
-	  r := dumpdata(s.v);
-	  stdIO.insize = o;
-	  stdIO.eof = p;
-	  stdIO.inindex = q;
-	  if 0 == r then nullE
-	  else buildErrorPacket("failed to dump data to '" + s.v + "'"))
-     else WrongArgString(0+1)
-     );
-setupfun("dumpdata",dumpdatafun);
-
-loaddatafun(e:Expr):Expr := (
-     when e
-     is s:Sequence do (
-	  when s.0 is x:Boolean do
-	  when s.1 is s:stringCell do (
-	       loaddata(if x == True then 1 else 0, s.v);			  -- should not return
-	       buildErrorPacket("failed to load data from '" + s.v + "'"))
-	  else WrongArgString(2)
-	  else WrongArgBoolean(1)
-	  )
-     is s:stringCell do (
-	  notifyYes := 1;
-	  loaddata(notifyYes,s.v);			  -- should not return
-	  buildErrorPacket("failed to load data from '" + s.v + "'"))
-     else WrongArg("string, or a pair: boolean value and string")
-     );
-setupfun("loaddata",loaddatafun);
 
 LongDoubleRightArrowFun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,LongDoubleRightArrowS);
 setup(LongDoubleRightArrowS,LongDoubleRightArrowFun);
@@ -72,6 +36,7 @@ setup(DeductionS,unaryDeductionFun,binaryDeductionFun);
 
 -- doublePointerfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,DoubleArrowS);
 optionFun(lhs:Code,rhs:Code):Expr := (
+    -- # typical value: symbol =>, Thing, Thing, Option
      l := eval(lhs);
      when l is Error do l
      else (
@@ -102,7 +67,7 @@ prependfun(e:Expr):Expr := (
 			      provide elem;
 			      foreach t in y.v do provide t;
 			      ),
-			 0,y.Mutable);
+			 hash_t(0),y.Mutable);
 		    Expr(sethash(r,y.Mutable)))
 	       else WrongArg(1+1,"a list or sequence")
 	       )
@@ -132,7 +97,7 @@ appendfun(e:Expr):Expr := (
 			      foreach t in y.v do provide t;
 			      provide elem;
 			      ),
-			 0,y.Mutable);
+			 hash_t(0),y.Mutable);
 		    Expr(sethash(r,y.Mutable)))
 	       else WrongArg(0+1,"a list or sequence")
 	       )
@@ -144,12 +109,13 @@ exitfun(e:Expr):Expr := (
      when e
      is ZZcell do (
 	  if isInt(e) 
-	  then exit(toInt(e))
+	  then (
+	       exit(toInt(e));
+	       nullE			     -- just to satisfy noisy compilers
+	       )
 	  else WrongArgSmallInteger(1))
      else WrongArgZZ(1));
 setupfun("exit",exitfun).Protected = false;
-
-applythem(obj:HashTable,fn:FunctionClosure):void := applyFCE(fn,Expr(obj));
 
 lookupCountFun(e:Expr):Expr := (
      when e
@@ -193,6 +159,33 @@ setup(GreaterGreaterS,greatergreaterfun2);
 barfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,BarS);
 setup(BarS,barfun);
 
+BarUnderscorefun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,BarUnderscoreS);
+setup(BarUnderscoreS,BarUnderscorefun);
+
+UnderscoreGreaterfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,UnderscoreGreaterS);
+setup(UnderscoreGreaterS,UnderscoreGreaterfun);
+
+UnderscoreGreaterEqualfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,UnderscoreGreaterEqualS);
+setup(UnderscoreGreaterEqualS,UnderscoreGreaterEqualfun);
+
+UnderscoreLessfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,UnderscoreLessS);
+setup(UnderscoreLessS,UnderscoreLessfun);
+
+UnderscoreLessEqualfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,UnderscoreLessEqualS);
+setup(UnderscoreLessEqualS,UnderscoreLessEqualfun);
+
+PowerGreaterfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,PowerGreaterS);
+setup(PowerGreaterS,PowerGreaterfun);
+
+PowerGreaterEqualfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,PowerGreaterEqualS);
+setup(PowerGreaterEqualS,PowerGreaterEqualfun);
+
+PowerLessfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,PowerLessS);
+setup(PowerLessS,PowerLessfun);
+
+PowerLessEqualfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,PowerLessEqualS);
+setup(PowerLessEqualS,PowerLessEqualfun);
+
 PowerStarStarfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,PowerStarStarS);
 setup(PowerStarStarS,PowerStarStarfun);
 
@@ -208,6 +201,12 @@ setup(HatHatS,hathatfun);
 Tildefun(rhs:Code):Expr := unarymethod(rhs,TildeS);
 setuppostfix(TildeS,Tildefun);
 
+PowerTildefun(rhs:Code):Expr := unarymethod(rhs,PowerTildeS);
+setuppostfix(PowerTildeS,PowerTildefun);
+
+UnderscoreTildefun(rhs:Code):Expr := unarymethod(rhs,UnderscoreTildeS);
+setuppostfix(UnderscoreTildeS,UnderscoreTildefun);
+
 ParenStarParenfun(rhs:Code):Expr := unarymethod(rhs,ParenStarParenS);
 setuppostfix(ParenStarParenS,ParenStarParenfun);
 
@@ -217,8 +216,20 @@ setuppostfix(UnderscoreStarS,UnderscoreStarfun);
 PowerStarfun(rhs:Code):Expr := unarymethod(rhs,PowerStarS);
 setuppostfix(PowerStarS,PowerStarfun);
 
+--PowerSharpfun(rhs:Code):Expr := unarymethod(rhs,PowerSharpS);
+--setuppostfix(PowerSharpS,PowerSharpfun);
+
+--UnderscoreSharpfun(rhs:Code):Expr := unarymethod(rhs,UnderscoreSharpS);
+--setuppostfix(UnderscoreSharpS,UnderscoreSharpfun);
+
 Exclamationfun(rhs:Code):Expr := unarymethod(rhs,ExclamationS);
 setuppostfix(ExclamationS,Exclamationfun);
+
+PowerExclamationfun(rhs:Code):Expr := unarymethod(rhs,PowerExclamationS);
+setuppostfix(PowerExclamationS,PowerExclamationfun);
+
+UnderscoreExclamationfun(rhs:Code):Expr := unarymethod(rhs,UnderscoreExclamationS);
+setuppostfix(UnderscoreExclamationS,UnderscoreExclamationfun);
 
 factorial(x:Expr):Expr := (
      when x
@@ -246,7 +257,7 @@ dotfun(lhs:Code,rhs:Code):Expr := (
 	  when rhs
 	  is r:globalSymbolClosureCode do lookup1force(x, Expr(SymbolClosure(globalFrame,r.symbol)))
 	  else printErrorMessageE(rhs,"expected a symbol"))
-     else WrongArg(1,"a hash table")
+     else WrongArgHashTable(1)
      );
 setup(DotS,dotfun);
 
@@ -277,7 +288,7 @@ header "
 
 WindowWidth(fd:int):int := Ccode(returns,"
    #ifdef HAVE_SYS_IOCTL_H
-     struct winsize x;
+     struct winsize x = {0};
      ioctl(1,TIOCGWINSZ,&x);	/* see /usr/include/$SYSTEM/termios.h */
      return x.ws_col;
    #else
@@ -286,7 +297,7 @@ WindowWidth(fd:int):int := Ccode(returns,"
 ");
 WindowHeight(fd:int):int := Ccode(returns,"
    #ifdef HAVE_SYS_IOCTL_H
-     struct winsize x;
+     struct winsize x = {0};
      ioctl(1,TIOCGWINSZ,&x);	/* see /usr/include/$SYSTEM/termios.h */
      return x.ws_row;
    #else
@@ -434,7 +445,7 @@ examine(e:Expr):Expr := (
 	  stdIO << "symbol body :" << endl;
 	  showsym(sb.symbol);
 	  nullE)
-     is c:CodeClosure do (
+     is c:PseudocodeClosure do (
 	  f := c.frame;
      	  showFrames(f);
 	  nullE)
@@ -483,7 +494,7 @@ examine(e:Expr):Expr := (
 	  << " transient : " << d.transient << endl
 	  << " protected : " << d.Protected << endl
 	  << " local creation allowed : " << d.LocalCreationAllowed << endl
-	  << " symboltable size : " << d.symboltable.numEntries << endl;
+	  << " symboltable size : " << d.symboltable.numEntries << endl;	-- TODO: lockRead() ?
      	  showFrames(f);
           if d.frameID != f.frameID then stdIO << " -- warning: incorrect frameID on first frame" << endl;
 	  nullE)
@@ -517,6 +528,34 @@ numparms(e:Expr):Expr := (
      else WrongArg("a function"));
 setupfun("numparms",numparms);
 
+utf8substrfun(e:Expr):Expr := (
+     when e is args:Sequence do
+	  if length(args) != 3 then WrongNumArgs(3) else
+	       when args.0 is s:stringCell do
+		   when args.1 is start:ZZcell do
+		       when args.2 is width:ZZcell do
+		       toExpr(utf8substr(s.v,toInt(start),toInt(width)))
+		       else WrongArgSmallInteger(3)
+		   else WrongArgSmallInteger(2)
+	       else WrongArg(1,"a string")
+     else WrongNumArgs(3)
+);
+setupfun("utf8substring",utf8substrfun);
+
+utf8charactersfun(e:Expr):Expr := (
+     when e
+     is s:stringCell do toExpr(utf8characters(s.v))
+     else WrongArg("a string"));
+setupfun("characters",utf8charactersfun);
+
+
+
+stringWidth(e:Expr):Expr := (
+     when e
+     is s:stringCell do toExpr(utf8width(s.v))
+     else WrongArg("a string"));
+setupfun("stringWidth",stringWidth);
+
 netWidth(e:Expr):Expr := (
      when e
      is n:Net do toExpr(n.width)
@@ -537,7 +576,9 @@ setupfun("netDepth",netDepth);
 
 unstack(e:Expr):Expr := (
      when e
+    -- # typical value: unstack, Net, List
      is n:Net do list(new Sequence len length(n.body) do foreach s in n.body do provide toExpr(s))
+    -- # typical value: unstack, String, List
      is stringCell do list(e)
      else WrongArg("a net"));
 setupfun("unstack",unstack);
@@ -559,21 +600,16 @@ endlfun(e:Expr):Expr := (
 setupfun("endl",endlfun).Protected = false;
 setupconst("newline", toExpr(newline));
 
-remove(x:Sequence,i:int):Sequence := (
-     n := length(x);
-     if i < 0 then i = i + n;
-     if 0 <= i && i < n then (
-	  new Sequence len n-1 do foreach y at j in x do if i != j then provide y
-	  )
-     else x
-     );
-
-remove(x:List,i:int):List := (
-     v := remove(x.v,i);
-     if v == x.v then return x;
-     r := List(x.Class, v, 0, x.Mutable);
-     r.hash = hash(r);
-     r);
+remove(x:List,i:int):Expr:= (
+     n := length(x.v);
+     if !x.Mutable then buildErrorPacket("expected a mutable list")
+     else if i >= n || i < -n then ArrayIndexOutOfBounds(i, n - 1)
+     else (
+	  if i < 0 then i = n + i;
+	  ret := x.v.i;
+	  for j from i to n - 2 do x.v.j = x.v.(j + 1);
+	  Ccode(void, x.v, "->len = ", n - 1);
+	  ret));
 
 removefun(e:Expr):Expr := (
      when e
@@ -584,67 +620,70 @@ removefun(e:Expr):Expr := (
 	       when args.0
 	       is x:List do (
 		    when args.1 is i:ZZcell do
-		     if isInt(i) then Expr(remove(x,toInt(i))) else WrongArgSmallInteger(2)
-		    else WrongArgZZ(2))
-	       is x:Sequence do (
-		    when args.1 is i:ZZcell do
-		    if isInt(i) then Expr(remove(x,toInt(i))) else WrongArgSmallInteger(2)
+		    if isInt(i) then remove(x,toInt(i)) else WrongArgSmallInteger(2)
 		    else WrongArgZZ(2))
 	       is f:Database do (
 		    when args.1 is key:stringCell do (
 	       		 if !f.isopen then return buildErrorPacket("database closed");
 	       		 if !f.Mutable then return buildErrorPacket("database not mutable");
-	       		 if 0 == dbmdelete(f.handle,key.v) then nullE
+			 ret := dbmfetch(f.handle,key.v);
+	       		 if 0 == dbmdelete(f.handle,key.v) then (
+			     when ret
+			     is s:string do toExpr(s)
+			     is null do nullE)
 	       		 else buildErrorPacket(dbmstrerror() + " : " + f.filename))
 		    else WrongArgString(2))
-	       is o:HashTable do (
-		    ret := remove(o,args.1);
-		    when ret is Error do ret else nullE)
+	       is o:HashTable do remove(o,args.1)
 	       else WrongArg(1,"a hash table or database")))
      else WrongNumArgs(2));
 setupfun("remove",removefun);
 
-erase(e:Expr):Expr := (
+erase(e:Expr):Expr :=
      when e is t:SymbolClosure do (
 	  s := t.symbol;
 	  d := globalDictionary;
 	  if t.frame != globalFrame then return WrongArg("a global symbol");
+	  found := false;
 	  while (
 	       table := d.symboltable;
+	       lockRead(table.mutex);
 	       i := s.word.hash & (length(table.buckets)-1);
 	       entryList := table.buckets.i;
 	       when entryList
-	       is entryListCell:SymbolListCell do (
+	       is entryListCell:SymbolListCell do
 		    if entryListCell.entry == s
 		    then (
-     	       	    	 if d.Protected then return buildErrorPacket("symbol is in a protected dictionary");
-			 table.numEntries = table.numEntries - 1;
-			 table.buckets.i = entryListCell.next;
-			 return nullE;
-			 );
-		    lastCell := entryListCell;
-		    entryList = entryListCell.next;
-		    while true do (
-			 when entryList
-			 is entryListCell:SymbolListCell do (
-			      if entryListCell.entry == s
-			      then (
-     	       	    	 	   if d.Protected then return buildErrorPacket("symbol is in a protected dictionary");
-				   table.numEntries = table.numEntries - 1;
-				   lastCell.next = entryListCell.next;
-				   return nullE;
-				   );
-			      lastCell = entryListCell;
-			      entryList = entryListCell.next;
-			      )
-			 is null do break;
-			 );
-		    )
+			 found = true;
+			 if ! d.Protected then (
+			      table.numEntries = table.numEntries - 1;
+			      table.buckets.i = entryListCell.next);
+			 )
+		    else (
+			 lastCell := entryListCell;
+			 entryList = entryListCell.next;
+			 while true do (
+			      when entryList
+			      is entryListCell:SymbolListCell do (
+				   if entryListCell.entry == s
+				   then (
+					found = true;
+					if ! d.Protected then (
+					     table.numEntries = table.numEntries - 1;
+					     lastCell.next = entryListCell.next);
+					break);
+				   lastCell = entryListCell;
+				   entryList = entryListCell.next;
+				   )
+			      is null do break;
+			      );
+			 )
 	       is null do nothing;
-	       d != d.outerDictionary ) do d = d.outerDictionary;
-	  buildErrorPacket("symbol has already been erased: "+s.word.name))
-     else WrongArg("a symbol")
-     );
+	       unlock(table.mutex);
+	       ! found && d != d.outerDictionary ) do d = d.outerDictionary;
+	  if ! found then buildErrorPacket("symbol has already been erased: "+s.word.name)
+	  else if d.Protected then buildErrorPacket("symbol is in a protected dictionary")
+	  else nullE)
+     else WrongArg("a symbol");
 setupfun("erase", erase);
 
 factorInt(n:int):Expr := (
@@ -712,13 +751,17 @@ method1c(e:Expr,env:Sequence):Expr := (
      else WrongArg("a class")
      );
 newmethod1(e:Expr):Expr := (
-     when e is s:Sequence do if length(s) != 2 then WrongNumArgs(2) else (
+     when e is s:Sequence do if length(s) != 3 then WrongNumArgs(3) else (
 	  f := s.0;
 	  output := s.1;
-	  env := Sequence(nullE,f);
-	  cfc := Expr(CompiledFunctionClosure(if output == True then method1c else method1,nextHash(),env));
-	  env.0 = cfc;
-	  cfc)
+	  when s.2 is typ:HashTable do (
+	       env := Sequence(nullE,f);
+	       cfc := Expr(CompiledFunctionClosure(if output == True then method1c else method1,nextHash(),env));
+	       if typ != compiledFunctionClosureClass then cfc = SpecialExpr(typ,cfc);
+	       env.0 = cfc;
+	       cfc)
+	  else WrongArg(3,"a type of CompiledFunctionClosure")
+	  )
      else WrongNumArgs(2));
 setupfun("newmethod1",newmethod1);
 
@@ -1092,7 +1135,66 @@ take(e:Expr):Expr := (
 	       	    list(x.Class,v,x.Mutable))
 	       else vv)
 	  is v:Sequence do take(v,args.1)
-	  else WrongArg(1,"a list or sequence"))
+	  else (
+	      iter := getIterator(args.0);
+	      if iter == nullE
+	      then return WrongArg(1, "a list, sequence, or iterable object");
+	      nextfunc := getNextFunction(iter);
+	      if nextfunc == nullE
+	      then return buildErrorPacket(
+		  "no method for applying next to iterator");
+	      start := 0;
+	      stop := 0;
+	      when args.1
+	      is n:ZZcell do (
+		  if !isInt(n) then return WrongArgSmallInteger(2);
+		  stop = toInt(n);
+		  if stop < 0 then return WrongArg(2, "a nonnegative integer");
+		  if stop == 0 then return list())
+	      is x:List do (
+		  ok := true;
+		  if length(x.v) == 2 then (
+		      when x.v.0
+		      is a:ZZcell do (
+			  when x.v.1
+			  is b:ZZcell do (
+			      if !isInt(a) || !isInt(b)
+			      then ok = false
+			      else (
+				  start = toInt(a);
+				  stop = toInt(b) + 1))
+			  else ok = false)
+		      else ok = false)
+		  else ok = false;
+		  if !ok
+		  then return WrongArg(2, "a list of two small integers"))
+	      else return WrongArg(2, "an integer or list of integers");
+	      if stop < start then return list();
+	      j := 0;
+	      y := nullE;
+	      while (j < start && y != StopIterationE)
+	      do (
+		  y = applyEE(nextfunc, iter);
+		  when y
+		  is Error do return returnFromFunction(y)
+		  else nothing;
+		  j = j + 1);
+	      r := new Sequence len stop - start do provide nullE;
+	      while (
+		  y = applyEE(nextfunc, iter);
+		  when y
+		  is Error do return returnFromFunction(y)
+		  else nothing;
+		  y != StopIterationE)
+	      do (
+		  r.(j - start) = y;
+		  j = j + 1;
+		  if j == stop then break);
+	      list(
+		      if j < start then emptySequence
+		      else if j == stop then r
+		      else new Sequence len j - start do (
+			  foreach x in r do provide x))))
      else WrongNumArgs(2)
      else WrongNumArgs(2));
 setupfun("take",take);
@@ -1220,11 +1322,6 @@ readlinkfun(e:Expr):Expr := (
      else WrongArgString());
 setupfun("readlink",readlinkfun);
 
-changeDirectory(e:Expr):Expr := (
-     when e is filename:stringCell do if chdir(filename.v) == -1 then buildErrorPacket(syscallErrorMessage("changing directory")) else nullE
-     else WrongArgString());
-setupfun("changeDirectory",changeDirectory);
-
 realpathfun(e:Expr):Expr := (
      when e is f:stringCell do (
      	  when realpath(expandFileName(f.v))
@@ -1241,6 +1338,7 @@ setupconst("flexiblePostfixOperators",Expr(new Sequence len length(opsWithPostfi
 setupconst("fixedBinaryOperators",    Expr(new Sequence len length(fixedBinaryOperators)  do foreach s in fixedBinaryOperators do provide Expr(s)));
 setupconst("fixedPrefixOperators",    Expr(new Sequence len length(fixedPrefixOperators)  do foreach s in fixedPrefixOperators do provide Expr(s)));
 setupconst("fixedPostfixOperators",   Expr(new Sequence len length(fixedPostfixOperators) do foreach s in fixedPostfixOperators do provide Expr(s)));
+setupconst("augmentedAssignmentOperators", Expr(new Sequence len length(augmentedAssignmentOperators) do foreach s in augmentedAssignmentOperators do provide Expr(s)));
 
 fileExists(e:Expr):Expr := (
      when e is name:stringCell do toExpr(fileExists(expandFileName(name.v)))
@@ -1480,14 +1578,13 @@ fillnodes(n:LexNode):void := (
 fillnodes(baseLexNode);
 setupconst("operatorNames",Expr(operatorNames));
 
-issym(d:Dictionary,s:string):Expr := when lookup(makeUniqueWord(s,parseWORD),d) is x:Symbol do True is null do False;
-
 getglobalsym(d:Dictionary,s:string):Expr := (
      w := makeUniqueWord(s,parseWORD);
      when lookup(w,d.symboltable) is x:Symbol do Expr(SymbolClosure(globalFrame,x))
      is null do (
+          if !isvalidsymbol(s) then return buildErrorPacket("invalid symbol");
 	  if d.Protected then return buildErrorPacket("attempted to create symbol in protected dictionary");
-	  t := makeSymbol(w,dummyPosition,d);
+	  t := makeSymbol(w,tempPosition,d);
 	  globalFrame.values.(t.frameindex)));
 
 getglobalsym(s:string):Expr := (
@@ -1496,7 +1593,7 @@ getglobalsym(s:string):Expr := (
      is x:Symbol do Expr(SymbolClosure(if x.thread then threadFrame else globalFrame,x))
      is null do (
 	  if globalDictionary.Protected then return buildErrorPacket("attempted to create symbol in protected dictionary");
-	  t := makeSymbol(w,dummyPosition,globalDictionary);
+	  t := makeSymbol(w,tempPosition,globalDictionary);
 	  globalFrame.values.(t.frameindex)));
 
 getGlobalSymbol(e:Expr):Expr := (
@@ -1531,75 +1628,6 @@ setupfun("isGlobalSymbol",isGlobalSymbol);
 --      else WrongNumArgs(0));
 -- setupfun("history",history);
 
-toPairs(r:array(int)):Expr := Expr( 
-     list (
-	  new Sequence len length(r)/2 at i do 
-	  provide new Sequence len 2 at j do 
-	  provide toExpr(r.(2*i+j))
-	  )
-     );
-
-regexmatch(e:Expr):Expr := (
-     ignorecase := false;
-     when e is a:Sequence do
-     if length(a) == 2 then
-     when a.0 is regexp:stringCell do
-     when a.1 is text:stringCell do (
-	  r := regexmatch(regexp.v,0,length(text.v),text.v,ignorecase);
-	  if regexmatchErrorMessage != noErrorMessage then buildErrorPacket("regex: "+regexmatchErrorMessage)
-     	  else if length(r) != 0 then toPairs(r) 
-	  else nullE)
-     else WrongArgString(2)
-     else WrongArgString(1)
-     else if length(a) == 3 then
-     when a.0 is regexp:stringCell do
-     when a.1 is start:ZZcell do if !isInt(start) then WrongArgSmallInteger(2) else
-     when a.2 is text:stringCell do (
-	  istart := toInt(start);
-	  r := regexmatch(regexp.v,istart,length(text.v)-istart,text.v,ignorecase);
-	  if length(r) != 0 then toPairs(r) 
-	  else if regexmatchErrorMessage == noErrorMessage
-	  then nullE
-	  else buildErrorPacket("regex: "+regexmatchErrorMessage))
-     else WrongArgString(3)
-     else WrongArgZZ(2)
-     else WrongArgString(1)
-     else if length(a) == 4 then
-     when a.0 is regexp:stringCell do
-     when a.1 is start:ZZcell do if !isInt(start) then WrongArgSmallInteger(2) else
-     when a.2 is range:ZZcell do if !isInt(range) then WrongArgSmallInteger(3) else
-     when a.3 is text:stringCell do (
-	  r := regexmatch(regexp.v,toInt(start),toInt(range),text.v,ignorecase);
-	  if length(r) != 0 then toPairs(r) 
-	  else if regexmatchErrorMessage == noErrorMessage
-	  then nullE
-	  else buildErrorPacket("regex: "+regexmatchErrorMessage))
-     else WrongArgString(4)
-     else WrongArgZZ(3)
-     else WrongArgZZ(2)
-     else WrongArgString(1)
-     else WrongNumArgs(2,3)
-     else WrongNumArgs(2,3));
-setupfun("regex",regexmatch);
-
-foo := "foo";
-replace(e:Expr):Expr := (
-     ignorecase := false;
-     when e is a:Sequence do
-     if length(a) == 3 then
-     when a.0 is regexp:stringCell do
-     when a.1 is replacement:stringCell do
-     when a.2 is text:stringCell do (
-	  r := regexreplace(regexp.v,replacement.v,text.v,foo,ignorecase);
-	  if r == foo then buildErrorPacket("replace: "+regexmatchErrorMessage)
-	  else toExpr(r))
-     else WrongArgString(3)
-     else WrongArgString(2)
-     else WrongArgString(1)
-     else WrongNumArgs(3)
-     else WrongNumArgs(3));
-setupfun("replaceStrings",replace);
-     
 listFrame(s:Sequence):Expr := Expr(List(mutableListClass, s, nextHash(), true));	  
 listFrame(f:Frame):Expr := if f.frameID == 0 then listFrame(emptySequence) else listFrame(f.values); -- refuse to defeat the protection of global variables
 frame(e:Expr):Expr := (
@@ -1607,7 +1635,7 @@ frame(e:Expr):Expr := (
      is s:Sequence do 
      if length(s) == 0 then Expr(listFrame(localFrame)) else WrongNumArgs(1,2)
      is sc:SymbolClosure do Expr(listFrame(sc.frame))
-     is c:CodeClosure do Expr(listFrame(c.frame))
+     is c:PseudocodeClosure do Expr(listFrame(c.frame))
      is fc:FunctionClosure do Expr(listFrame(fc.frame))
      is cfc:CompiledFunctionClosure do Expr(listFrame(cfc.env))
      is CompiledFunction do Expr(listFrame(emptySequence))
@@ -1624,11 +1652,17 @@ listFrames(f:Frame):Expr := Expr( list( new Sequence len numFrames(f) do while (
 
 frames(e:Expr):Expr := (
      when e
+    -- # typical value: frames, Sequence, List
      is a:Sequence do if length(a) == 0 then listFrames(localFrame) else WrongNumArgs(0,1) 
+    -- # typical value: frames, Symbol, List
      is sc:SymbolClosure do Expr(listFrames(sc.frame))
-     is c:CodeClosure do Expr(listFrames(c.frame))
+    -- # typical value: frames, PseudocodeClosure, List
+    is c:PseudocodeClosure do Expr(listFrames(c.frame))
+    -- # typical value: frames, FunctionClosure, List
      is fc:FunctionClosure do Expr(listFrames(fc.frame))
+    -- # typical value: frames, CompiledFunctionClosure, List
      is cfc:CompiledFunctionClosure do Expr(list(listFrame(cfc.env)))
+    -- # typical value: frames, CompiledFunction, List
      is CompiledFunction do Expr(list(listFrame(emptySequence)))
      is s:SpecialExpr do frames(s.e)
      else WrongArg("a function, a symbol, or ()"));
@@ -1638,12 +1672,19 @@ localDictionaries(f:Frame):Expr := Expr( list( new Sequence len numFrames(f) do 
 
 localDictionaries(e:Expr):Expr := (
      when e
+    -- # typical value: localDictionaries, Sequence, List
      is x:Sequence do if length(x) != 0 then WrongNumArgs(0,1) else localDictionaries(noRecycle(localFrame))
+    -- # typical value: localDictionaries, Dictionary, List
      is x:DictionaryClosure do localDictionaries(x.frame)
+    -- # typical value: localDictionaries, Symbol, List
      is x:SymbolClosure do localDictionaries(x.frame)
-     is x:CodeClosure do localDictionaries(x.frame)
+    -- # typical value: localDictionaries, PseudocodeClosure, List
+    is x:PseudocodeClosure do localDictionaries(x.frame)
+    -- # typical value: localDictionaries, FunctionClosure, List
      is x:FunctionClosure do localDictionaries(x.frame)
+    -- # typical value: localDictionaries, CompiledFunctionClosure, List
      is CompiledFunctionClosure do localDictionaries(emptyFrame)	    -- some values are there, but no symbols
+    -- # typical value: localDictionaries, CompiledFunction, List
      is CompiledFunction do localDictionaries(emptyFrame)			    -- no values or symbols are there
      is s:SpecialExpr do localDictionaries(s.e)
      else WrongArg("a function, a symbol, or ()"));
@@ -1667,17 +1708,17 @@ dictionaryPath(e:Expr):Expr := (
      is t:List do (					    -- set the current globalDictionary list
 	  s := t.v;
 	  n := length(s);
-	  if n == 0 then return WrongArg("expected a nonempty list of dictionaries");
+	  if n == 0 then return WrongArg("a nonempty list of dictionaries");
           sawUnprotected := false;
 	  foreach x in s do 
 	  when x is dc:DictionaryClosure do (
 	       d := dc.dictionary;
 	       if !d.Protected then sawUnprotected = true;
-	       if d.frameID != 0 || d.transient then return WrongArg("expected a list of global dictionaries")
+	       if d.frameID != 0 || d.transient then return WrongArg("a list of global dictionaries")
 	       )
-	  else return WrongArg("expected a list of dictionaries");
-	  for i from 0 to n-2 do for j from i+1 to n-1 do if s.i == s.j then return WrongArg("expected a list of dictionaries with no duplicate entries");
-          if !sawUnprotected then return WrongArg("expected a list of dictionaries, not all protected");
+	  else return WrongArg("a list of dictionaries");
+	  for i from 0 to n-2 do for j from i+1 to n-1 do if s.i == s.j then return WrongArg("a list of dictionaries with no duplicate entries");
+          if !sawUnprotected then return WrongArg("a list of dictionaries, not all protected");
      	  a := new array(Dictionary) len n do foreach x in s do when x is d:DictionaryClosure do provide d.dictionary else nothing;
      	  a.(n-1).outerDictionary = a.(n-1);
      	  for i from 0 to n-2 do a.i.outerDictionary = a.(i+1);
@@ -1697,13 +1738,28 @@ storeGlobalDictionaries(e:Expr):Expr := (			    -- called with (symbol,newvalue)
 storeInHashTable(
      globalAssignmentHooks,
      Expr(SymbolBody(dictionaryPathS)),
-     Expr(CompiledFunction(storeGlobalDictionaries,nextHash())));
+     Expr(newCompiledFunction(storeGlobalDictionaries)));
 
 getcwdfun(e:Expr):Expr := (				    -- this has to be a function, because getcwd may fail
      when e is s:Sequence do
      if length(s) == 0 then cwd() else WrongNumArgs(0)
      else WrongNumArgs(0));
 setupfun("currentDirectory",getcwdfun);
+
+changeDirectory(dir:string):Expr := (
+    if chdir(expandFileName(dir)) == -1
+    then buildErrorPacket(syscallErrorMessage("changing directory"))
+    else getcwdfun(emptySequenceE));
+
+changeDirectory(e:Expr):Expr := (
+    when e
+    is filename:stringCell do changeDirectory(filename.v)
+    is a:Sequence do (
+	if length(a) == 0
+	then changeDirectory("~")
+	else WrongArg("a string or ()"))
+    else WrongArg("a string or ()"));
+setupfun("changeDirectory",changeDirectory);
 
 export debuggerHook := nullE;
 
@@ -1713,6 +1769,7 @@ engineDebugLevelS := dummySymbol;
 debuggingModeS := dummySymbol;
 errorDepthS := dummySymbol;
 gbTraceS := dummySymbol;
+numTBBThreadsS := dummySymbol;
 numericalAlgebraicGeometryTraceS := dummySymbol;
 debuggerHookS := dummySymbol;
 lineNumberS := dummySymbol;
@@ -1742,10 +1799,13 @@ export StandardE := Expr(StandardS);
 export topLevelMode := Expr(StandardS);
 topLevelModeS := dummySymbol;
 
-initialRandomSeed := toInteger(0);
+initialRandomSeed := zeroZZ;
 initialRandomHeight := toInteger(10);
 
-setupvar("maxAllowableThreads",toExpr(Ccode( int, " getMaxAllowableThreads() " )));
+maxAllowableThreadsS := setupvar("maxAllowableThreads",toExpr(0)); -- the value returned by getMaxAllowableThreads may not be initialized yet
+export setMaxAllowableThreads():void := (
+     setGlobalVariable(maxAllowableThreadsS, toExpr(Ccode(int, "getMaxAllowableThreads()")));
+     );
 
 syms := SymbolSequence(
      (  backtraceS = setupvar("backtrace",toExpr(backtrace));  backtraceS  ),
@@ -1754,7 +1814,8 @@ syms := SymbolSequence(
      (  debuggingModeS = setupvarThread("debuggingMode",toExpr(debuggingMode));  debuggingModeS  ),
      (  defaultPrecisionS = setupvar("defaultPrecision",toExpr(defaultPrecision));  defaultPrecisionS  ),
      (  errorDepthS = setupvar("errorDepth",toExpr(errorDepth));  errorDepthS  ),
-     (  gbTraceS = setupvar("gbTrace",toExpr(gbTrace));  gbTraceS  ),
+     (  gbTraceS = setupvar("gbTrace",toExpr(gbTrace));  gbTraceS  ), 
+     (  numTBBThreadsS = setupvar("numTBBThreads",toExpr(numTBBThreads));  numTBBThreadsS  ),
      (  numericalAlgebraicGeometryTraceS = setupvar("numericalAlgebraicGeometryTrace",toExpr(numericalAlgebraicGeometryTrace));  numericalAlgebraicGeometryTraceS  ),
      (  debuggerHookS = setupvar("debuggerHook",debuggerHook);  debuggerHookS  ),
      (  lineNumberS = setupvar("lineNumber",toExpr(lineNumber));  lineNumberS  ),
@@ -1870,6 +1931,10 @@ store(e:Expr):Expr := (			    -- called with (symbol,newvalue)
 		    else if sym === engineDebugLevelS then (engineDebugLevel = n; e)
 		    else if sym === recursionLimitS then (recursionLimit = n; e)
 		    else if sym === lineNumberS then (lineNumber = n; e)
+		    else if sym === numTBBThreadsS then (
+			 if n < 0 then return buildErrorPacket("numTBBThreads cannot be set to negative value");
+             numTBBThreads = n;
+             e)
 		    else if sym === allowableThreadsS then (
 			 if n < 1 || n > Ccode( int, " getMaxAllowableThreads() " ) 
 			 then return buildErrorPacket("allowableThreads: expected integer in range 1 .. " + tostring(Ccode( int, " getMaxAllowableThreads() " )));
@@ -1899,13 +1964,14 @@ store(e:Expr):Expr := (			    -- called with (symbol,newvalue)
 		    || sym === printingLeadLimitS
 		    || sym === printingTrailLimitS
 		    || sym === gbTraceS
+            || sym === numTBBThreadsS
 		    || sym === numericalAlgebraicGeometryTraceS
 		    || sym === printWidthS
 		    then (when sym is s:SymbolClosure do s.symbol.word.name else "") + ": expected a small integer"
 		    else msg))
 	  else buildErrorPacket(msg))
      else WrongNumArgs(2));
-storeE := Expr(CompiledFunction(store,nextHash()));
+storeE := Expr(newCompiledFunction(store));
 foreach s in syms do storeInHashTable(
      globalAssignmentHooks,
      Expr(SymbolBody(s)),
@@ -1913,7 +1979,7 @@ foreach s in syms do storeInHashTable(
 storeE = nullE;
 syms = SymbolSequence();
 
-export fileDictionaries := newHashTable(mutableHashTableClass,nothingClass);
+export fileDictionaries := newHashTableWithHash(mutableHashTableClass,nothingClass);
 setupconst("fileDictionaries",Expr(fileDictionaries));
 
 export newStaticLocalDictionaryClosure(filename:string):DictionaryClosure := (
@@ -1990,7 +2056,11 @@ fileLength(e:Expr):Expr := (
 	       if ret == ERROR
 	       then Expr(buildErrorPacket(syscallErrorMessage("getting the length of a file")))
 	       else toExpr(ret))
-	  else if f.output then toExpr(getFileFOSS(f).bytesWritten + getFileFOSS(f).outindex)
+	  else if f.output then (
+	       foss := getFileFOSS(f);
+	       r := toExpr(foss.bytesWritten + foss.outindex);
+	       releaseFileFOSS(f);
+	       r)
      	  else buildErrorPacket("file not open"))
      is f:stringCell do (
 	  filename := f.v;
@@ -2020,61 +2090,53 @@ setupfun("dumpNodes",dumpNodes);
 toExternalString(e:Expr):Expr := (
      when e
      is x:RRcell do toExpr(toExternalString(x.v))
+     is x:RRicell do toExpr(toExternalString(x.v))
      is x:CCcell do toExpr(toExternalString(x.v))
      else WrongArg("a real or complex number")
      );
 setupfun("toExternalString0",toExternalString);
 
+header "
+#ifndef GC_get_full_gc_total_time /* added in bdwgc 8 */
+unsigned long GC_get_full_gc_total_time(void) {return 0;}
+#endif
+#define DEF_GC_FN0(s)	static void * s##_0(void *client_data) { (void) client_data; return (void *) (long) s(); }
+DEF_GC_FN0(GC_get_full_gc_total_time)
+DEF_GC_FN0(GC_get_free_space_divisor)
+";
+
+export gcTime():double := Ccode(double, "0.001 * (unsigned long) GC_call_with_alloc_lock(GC_get_full_gc_total_time_0, NULL)");
+
 GCstats(e:Expr):Expr := (
      when e is s:Sequence do
-     if length(s) == 0 then Expr(toHashTable(Sequence(
-		    "heap size" => toExpr(Ccode(int,"GC_get_heap_size()")),
-		    "number of collections" => toExpr(Ccode(int,"GC_get_gc_no()")),
-		    "parallel" => toExpr(Ccode(bool,"!!GC_get_parallel()")),
-		    "finalize on demand" => toExpr(Ccode(bool,"!!GC_get_finalize_on_demand()")),
-		    "java finalization" => toExpr(Ccode(bool,"GC_get_java_finalization()")),
-		    "don't expand" => toExpr(Ccode(bool,"GC_get_dont_expand()")),
-		    "full freq" => toExpr(Ccode(int,"GC_get_full_freq()")),
-		    "max retries" => toExpr(Ccode(int,"GC_get_max_retries()")),
-		    "time limit" => toExpr(Ccode(ulong,"GC_get_time_limit()")),
-		    "GC_INITIAL_HEAP_SIZE" => toExpr(getenv("GC_INITIAL_HEAP_SIZE")),
-		    "GC_MAXIMUM_HEAP_SIZE" => toExpr(getenv("GC_MAXIMUM_HEAP_SIZE")),
-		    "GC_LOOP_ON_ABORT" => toExpr(getenv("GC_LOOP_ON_ABORT")),
-		    "GC_PRINT_STATS" => toExpr(getenv("GC_PRINT_STATS")),
-		    "GC_LOG_FILE" => toExpr(getenv("GC_LOG_FILE")),
-		    "GC_PRINT_VERBOSE_STATS" => toExpr(getenv("GC_PRINT_VERBOSE_STATS")),
-		    "GC_DUMP_REGULARLY" => toExpr(getenv("GC_DUMP_REGULARLY")),
-		    "GC_BACKTRACES" => toExpr(getenv("GC_BACKTRACES")),
-		    "GC_PRINT_ADDRESS_MAP" => toExpr(getenv("GC_PRINT_ADDRESS_MAP")),
-		    "GC_NPROCS" => toExpr(getenv("GC_NPROCS")),
-		    "GC_MARKERS" => toExpr(getenv("GC_MARKERS")),
-		    "GC_NO_BLACKLIST_WARNING" => toExpr(getenv("GC_NO_BLACKLIST_WARNING")),
-		    "GC_LARGE_ALLOC_WARN_INTERVAL" => toExpr(getenv("GC_LARGE_ALLOC_WARN_INTERVAL")),
-		    "GC_IGNORE_GCJ_INFO" => toExpr(getenv("GC_IGNORE_GCJ_INFO")),
-		    "GC_PRINT_BACK_HEIGHT" => toExpr(getenv("GC_PRINT_BACK_HEIGHT")),
-		    "GC_RETRY_SIGNALS," => toExpr(getenv("GC_RETRY_SIGNALS,")),
-		    "GC_USE_GETWRITEWATCH" => toExpr(getenv("GC_USE_GETWRITEWATCH")),
-		    "GC_DISABLE_INCREMENTAL" => toExpr(getenv("GC_DISABLE_INCREMENTAL")),
-		    "GC_ENABLE_INCREMENTAL" => toExpr(getenv("GC_ENABLE_INCREMENTAL")),
-		    "GC_PAUSE_TIME_TARGET" => toExpr(getenv("GC_PAUSE_TIME_TARGET")),
-		    "GC_FULL_FREQUENCY" => toExpr(getenv("GC_FULL_FREQUENCY")),
-		    "GC_FREE_SPACE_DIVISOR" => toExpr(getenv("GC_FREE_SPACE_DIVISOR")), -- the environment variable
-		    "GC_free_space_divisor" => toExpr(Ccode(long,"GC_get_free_space_divisor()")),           -- the set value in memory
-		    "GC_UNMAP_THRESHOLD" => toExpr(getenv("GC_UNMAP_THRESHOLD")),
-		    "GC_FORCE_UNMAP_ON_GCOLLECT" => toExpr(getenv("GC_FORCE_UNMAP_ON_GCOLLECT")),
-		    "GC_FIND_LEAK" => toExpr(getenv("GC_FIND_LEAK")),
-		    "GC_ALL_INTERIOR_POINTERS" => toExpr(getenv("GC_ALL_INTERIOR_POINTERS")),
-		    "GC_all_interior_pointers" => toExpr(Ccode(long,"GC_get_all_interior_pointers()")),           -- the set value in memory
-		    "GC_DONT_GC" => toExpr(getenv("GC_DONT_GC")),
-		    "GC_TRACE" => toExpr(getenv("GC_TRACE"))
-		    )))
+     if length(s) == 0 then (
+	  h := newHashTable(hashTableClass,nothingClass);
+	  h.beingInitialized = true;
+	  foreach eq in envp do if match(eq,0,"GC_") then (
+	       j := index(eq,0,'=');
+	       if j != -1 then (
+		    keyS := substr(eq,0,j);
+		    valS := substr(eq,j+1);
+		    storeInHashTable(h,toExpr(keyS),toExpr(valS))));
+	  Ccode(void, "
+	       struct GC_prof_stats_s stats;
+	       GC_get_prof_stats(&stats, sizeof stats);");
+	  -- M2 developers may (possibly) care about e.g.: GC_LOG_FILE GC_FIND_LEAK GC_IGNORE_GCJ_INFO GC_LARGE_ALLOC_WARN_INTERVAL
+	  --      GC_RETRY_SIGNALS GC_UNMAP_THRESHOLD GC_FORCE_UNMAP_ON_GCOLLECT GC_BACKTRACES GC_PRINT_ADDRESS_MAP GC_DONT_GC
+	  --      GC_USE_ENTIRE_HEAP GC_TRACE etc.
+	  storeInHashTable(h,toExpr("heapSize"),toExpr(Ccode(long, "stats.heapsize_full - stats.unmapped_bytes")));
+	  storeInHashTable(h,toExpr("bytesAlloc"),toExpr(Ccode(long, "stats.bytes_allocd_since_gc + stats.allocd_bytes_before_gc")));
+	  storeInHashTable(h,toExpr("numGCs"),toExpr(Ccode(long, "stats.gc_no")));
+	  storeInHashTable(h,toExpr("numGCThreads"),toExpr(Ccode(long, "stats.markers_m1 + 1")));
+	  storeInHashTable(h,toExpr("gcCpuTimeSecs"),toExpr(gcTime()));
+	  storeInHashTable(h,toExpr("GC_free_space_divisor"),	-- the set value in memory
+	       toExpr(Ccode(long, "(long) GC_call_with_alloc_lock(GC_get_free_space_divisor_0, NULL)")));
+	  Expr(sethash(h,false)))
      else WrongNumArgs(0)
      else WrongNumArgs(0));
 setupfun("GCstats",GCstats);
 
-header "
-extern void set_gftable_dir(char *); /* defined in library factory, as patched by us */
-";
+header "extern void set_gftable_dir(char *); /* defined in library factory, as patched by us */";
 setFactoryGFtableDirectory(e:Expr):Expr := (
      when e is d:stringCell do (
      	  Ccode(void,"set_gftable_dir(", tocharstar(d.v), ")");

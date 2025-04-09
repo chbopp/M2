@@ -5,8 +5,8 @@ newPackage(
         Authors => {{Name => "Dylan Peifer",
                      Email => "djp282@cornell.edu",
                      HomePage => "https://www.math.cornell.edu/~djp282"}},
-        Headline => "Compute Groebner bases via the Groebner walk",
-        DebuggingMode => true
+	     Keywords => {"Groebner Basis Algorithms"},
+        Headline => "Groebner bases via the Groebner walk"
         )
 
 -- Copyright 2017 Dylan Peifer
@@ -187,7 +187,7 @@ genericWalk(GroebnerBasis, Ring) := GroebnerBasis => (G, R) -> (
         );
 
     -- finalization (transfer G to order in R)
-    if walkTrace > 0 then << "Total Conversionss: " << count << endl;  
+    if walkTrace > 0 then << "Total Conversions: " << count << endl;  
 
     -- correct for forceGB not removing content over QQ
     if coefficientRing R === QQ then (

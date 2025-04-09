@@ -1,6 +1,9 @@
 /* Copyright 2017 Mahrud Sayrafi and Michael E. Stillman
    Mahrud Sayrafi's code in this file is in the public domain. */
 
+#include "localring.hpp"
+
+#include "interface/factory.h"
 #include "text-io.hpp"
 #include "ringmap.hpp"
 #include "monoid.hpp"
@@ -9,8 +12,8 @@
 #include "debug.hpp"
 #include "matrix.hpp"
 #include "matrix-con.hpp"
-#include "localring.hpp"
 #include "mutablecomplex.hpp"
+#include "exceptions.hpp"
 
 LocalRing *LocalRing::create(const PolyRing *R, GBComputation *P)
 {
@@ -36,7 +39,7 @@ bool LocalRing::initialize_local(const PolyRing *R, GBComputation *P)
       R->getCoefficients()
           ->cast_to_LocalRing()  // disallowed in x-relem.cpp
       ||
-      R->getMonoid()->getNonTermOrderVariables()->len >
+      R->getMonoid()->numNonTermOrderVariables() >
           0)  // disallowed in x-relem.cpp
     use_gcd_simplify = false;
   else
@@ -77,7 +80,7 @@ void LocalRing::simplify(local_elem *f) const
       x = f->numer;
       const RingElement *a = RingElement::make_raw(mRing, x);
       const RingElement *b = RingElement::make_raw(mRing, y);
-      const RingElement *c = rawGCDRingElement(a, b, NULL, false);
+      const RingElement *c = rawGCDRingElement(a, b, nullptr, false);
 
 #if 0
       // Debugging code
@@ -169,18 +172,18 @@ Ring::CoefficientType LocalRing::coefficient_type() const
 bool LocalRing::is_unit(const ring_elem f) const
 {
   // TODO: make sure f is a local ring element
-  return (!is_in_prime(f.local_val->numer));
+  return (!is_in_prime(f.get_local_elem()->numer));
 }
 
 bool LocalRing::is_zero(const ring_elem f) const
 {
-  return (mRing->is_zero(f.local_val->numer));
+  return (mRing->is_zero(f.get_local_elem()->numer));
 }
 
 bool LocalRing::is_equal(const ring_elem a, const ring_elem b) const
 {
-  local_elem *f = a.local_val;
-  local_elem *g = b.local_val;
+  const local_elem *f = a.get_local_elem();
+  const local_elem *g = b.get_local_elem();
   if (mRing->is_equal(f->denom, g->denom))
     {
       return mRing->is_equal(f->numer, g->numer);
@@ -196,8 +199,8 @@ bool LocalRing::is_equal(const ring_elem a, const ring_elem b) const
 
 int LocalRing::compare_elems(const ring_elem a, const ring_elem b) const
 {
-  local_elem *f = a.local_val;
-  local_elem *g = b.local_val;
+  const local_elem *f = a.get_local_elem();
+  const local_elem *g = b.get_local_elem();
   int cmp = mRing->compare_elems(f->numer, g->numer);
   if (cmp != 0) return cmp;
   return mRing->compare_elems(f->denom, g->denom);
@@ -205,13 +208,13 @@ int LocalRing::compare_elems(const ring_elem a, const ring_elem b) const
 
 ring_elem LocalRing::numerator(ring_elem f) const
 {
-  local_elem *g = f.local_val;
+  const local_elem *g = f.get_local_elem();
   return mRing->copy(g->numer);
 }
 
 ring_elem LocalRing::denominator(ring_elem f) const
 {
-  local_elem *g = f.local_val;
+  const local_elem *g = f.get_local_elem();
   return mRing->copy(g->denom);
 }
 
@@ -223,7 +226,6 @@ ring_elem LocalRing::fraction(const ring_elem top, const ring_elem bottom) const
 // TODO: implement for MutableMatrix
 void LocalRing::lift_up(const Ring *R, const Matrix *m, Matrix *&result) const
 {
-  local_elem *f;
   const RingElement *a, *b, *d;
   MatrixConstructor mat(mRing->make_FreeModule(m->n_rows()), m->n_cols());
   Matrix::column_iterator i(m), end(m);
@@ -233,10 +235,11 @@ void LocalRing::lift_up(const Ring *R, const Matrix *m, Matrix *&result) const
       a = RingElement::make_raw(mRing, mRing->from_long(1));
       for (i = Matrix::column_iterator(m, c); i != end; ++i)
         {
-          f = ((*i)->coeff).local_val;
+          const local_elem * f = ((*i)->coeff).get_local_elem();
           b = RingElement::make_raw(mRing, f->denom);
-          d = rawGCDRingElement(a, b, NULL, false);
+          d = rawGCDRingElement(a, b, nullptr, false);
 #if 0 // FIXME: GCD(8,2)=1 apparently ...
+          // see https://github.com/Macaulay2/M2/issues/1958
           drelem(a);
           std::cout<<" ";
           drelem(b);
@@ -249,7 +252,7 @@ void LocalRing::lift_up(const Ring *R, const Matrix *m, Matrix *&result) const
         }
       for (i = Matrix::column_iterator(m, c); i != end; ++i)
         {
-          f = ((*i)->coeff).local_val;
+          const local_elem * f = ((*i)->coeff).get_local_elem();
           mat.set_entry(
               (*i)->comp,
               c,
@@ -270,7 +273,7 @@ bool LocalRing::lift(const Ring *Rg, const ring_elem f, ring_elem &result) const
                // e.g. when this = frac (QQ[x,y,z]).  Is an element of
   if (Rg == mRing)
     {
-      local_elem *h = f.local_val;
+      const local_elem *h = f.get_local_elem();
       if (mRing->is_equal(h->denom, mRing->one()))
         {
           result = mRing->copy(h->numer);
@@ -311,7 +314,7 @@ bool LocalRing::promote(const Ring *Rf,
   return false;
 }
 
-bool LocalRing::from_rational(mpq_ptr n, ring_elem &result) const
+bool LocalRing::from_rational(mpq_srcptr n, ring_elem &result) const
 {
   local_elem *f = new_local_elem();
   f->numer = mRing->from_int(mpq_numref(n));
@@ -329,7 +332,7 @@ ring_elem LocalRing::from_long(long n) const
   return ring_elem(f);
 }
 
-ring_elem LocalRing::from_int(mpz_ptr n) const
+ring_elem LocalRing::from_int(mpz_srcptr n) const
 {
   local_elem *f = new_local_elem();
   f->numer = mRing->from_int(n);
@@ -347,7 +350,7 @@ ring_elem LocalRing::var(int v) const
 
 int LocalRing::index_of_var(const ring_elem a) const
 {
-  const local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   if (!mRing->is_unit(f->denom))
     // If so, a cannot be a variable, otherwise, by 'simplify', f->denom == 1.
     return -1;
@@ -356,7 +359,7 @@ int LocalRing::index_of_var(const ring_elem a) const
 
 M2_arrayint LocalRing::support(const ring_elem a) const
 {
-  const local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   M2_arrayint result1 = mRing->support(f->numer);
   M2_arrayint result2 = mRing->support(f->denom);
   M2_arrayint result = M2_makearrayint(result1->len + result2->len);
@@ -375,16 +378,16 @@ void LocalRing::lower_content(ring_elem &c, const ring_elem g) const
       return;
     }
 
-  local_elem *cf = c.local_val;
-  local_elem *gf = g.local_val;
+  const local_elem *cf = c.get_local_elem();
+  const local_elem *gf = g.get_local_elem();
   const RingElement *c1 = RingElement::make_raw(mRing, cf->numer);
   const RingElement *c2 = RingElement::make_raw(mRing, cf->denom);
   const RingElement *g1 = RingElement::make_raw(mRing, gf->numer);
   const RingElement *g2 = RingElement::make_raw(mRing, gf->denom);
 
-  c1 = rawGCDRingElement(c1, g1, NULL, false);
+  c1 = rawGCDRingElement(c1, g1, nullptr, false);
 
-  const RingElement *cc2 = rawGCDRingElement(c2, g2, NULL, false);
+  const RingElement *cc2 = rawGCDRingElement(c2, g2, nullptr, false);
   const RingElement *cc3 = (*c2) * (*g2);
   const RingElement *cc4 = (*cc3) / (*cc2);
 
@@ -398,27 +401,17 @@ void LocalRing::lower_content(ring_elem &c, const ring_elem g) const
 bool LocalRing::is_homogeneous(const ring_elem a) const
 {
   if (is_zero(a)) return true;
-  const local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   if (!mRing->is_homogeneous(f->numer) || !mRing->is_homogeneous(f->denom))
     return false;
   return true;
 }
 
-void LocalRing::degree(const ring_elem a, int *d) const
+bool LocalRing::multi_degree(const ring_elem a, monomial d) const
 {
-  const local_elem *f = a.local_val;
-  mRing->degree(f->numer, d);
-  int *e = degree_monoid()->make_one();
-  mRing->degree(f->denom, e);
-  degree_monoid()->divide(d, e, d);
-  degree_monoid()->remove(e);
-}
-
-bool LocalRing::multi_degree(const ring_elem a, int *d) const
-{
-  const local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   bool tophom = mRing->multi_degree(f->numer, d);
-  int *e = degree_monoid()->make_one();
+  monomial e = degree_monoid()->make_one();
   bool bottomhom = mRing->multi_degree(f->denom, e);
   degree_monoid()->divide(d, e, d);
   degree_monoid()->remove(e);
@@ -426,7 +419,7 @@ bool LocalRing::multi_degree(const ring_elem a, int *d) const
 }
 
 void LocalRing::degree_weights(const ring_elem,
-                               M2_arrayint,
+                               const std::vector<int> &,
                                int &lo,
                                int &hi) const
 {
@@ -438,11 +431,11 @@ void LocalRing::degree_weights(const ring_elem,
 ring_elem LocalRing::homogenize(const ring_elem a,
                                 int v,
                                 int deg,
-                                M2_arrayint wts) const
+                                const std::vector<int> &wts) const
 {
   int d1, d2, lo1, lo2;
   ring_elem top, bottom;
-  const local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   mRing->degree_weights(f->numer, wts, lo1, d1);
   mRing->degree_weights(f->denom, wts, lo2, d2);
   if (deg >= d1 - d2)
@@ -459,9 +452,11 @@ ring_elem LocalRing::homogenize(const ring_elem a,
   return ring_elem(result);
 }
 
-ring_elem LocalRing::homogenize(const ring_elem a, int v, M2_arrayint wts) const
+ring_elem LocalRing::homogenize(const ring_elem a,
+                                int v,
+                                const std::vector<int> &wts) const
 {
-  const local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   ring_elem top = mRing->homogenize(f->numer, v, wts);
   ring_elem bottom = mRing->homogenize(f->denom, v, wts);
   local_elem *result = make_elem(top, bottom);
@@ -470,7 +465,7 @@ ring_elem LocalRing::homogenize(const ring_elem a, int v, M2_arrayint wts) const
 
 ring_elem LocalRing::copy(const ring_elem a) const
 {
-  local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   local_elem *g = new_local_elem();
   g->numer = mRing->copy(f->numer);
   g->denom = mRing->copy(f->denom);
@@ -481,7 +476,7 @@ void LocalRing::remove(ring_elem &a) const {}
 
 ring_elem LocalRing::negate(const ring_elem a) const
 {
-  const local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   local_elem *result = new_local_elem();
   result->numer = mRing->negate(f->numer);
   result->denom = mRing->copy(f->denom);
@@ -490,8 +485,8 @@ ring_elem LocalRing::negate(const ring_elem a) const
 
 ring_elem LocalRing::add(const ring_elem a, const ring_elem b) const
 {
-  const local_elem *f = a.local_val;
-  const local_elem *g = b.local_val;
+  const local_elem *f = a.get_local_elem();
+  const local_elem *g = b.get_local_elem();
   ring_elem top, bottom;
 
   if (mRing->is_equal(f->denom, g->denom))
@@ -513,8 +508,8 @@ ring_elem LocalRing::add(const ring_elem a, const ring_elem b) const
 
 ring_elem LocalRing::subtract(const ring_elem a, const ring_elem b) const
 {
-  const local_elem *f = a.local_val;
-  const local_elem *g = b.local_val;
+  const local_elem *f = a.get_local_elem();
+  const local_elem *g = b.get_local_elem();
   ring_elem top, bottom;
 
   if (mRing->is_equal(f->denom, g->denom))
@@ -536,8 +531,8 @@ ring_elem LocalRing::subtract(const ring_elem a, const ring_elem b) const
 
 ring_elem LocalRing::mult(const ring_elem a, const ring_elem b) const
 {
-  local_elem *f = a.local_val;
-  local_elem *g = b.local_val;
+  const local_elem *f = a.get_local_elem();
+  const local_elem *g = b.get_local_elem();
   ring_elem top = mRing->mult(f->numer, g->numer);
   ring_elem bottom = mRing->mult(f->denom, g->denom);
   if (mRing->is_zero(bottom)) return set_non_unit_frac(f->denom);
@@ -546,7 +541,7 @@ ring_elem LocalRing::mult(const ring_elem a, const ring_elem b) const
 
 ring_elem LocalRing::power(const ring_elem a, int n) const
 {
-  local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   ring_elem top, bottom;
   if (n >= 0)
     {
@@ -564,17 +559,16 @@ ring_elem LocalRing::power(const ring_elem a, int n) const
         }
       else
         {
-          ERROR("attempt to divide by non-unit");
-          return zero();
+          throw exc::engine_error("attempt to divide by a non-unit");
         }
 
       if (mRing->is_zero(bottom)) return set_non_unit_frac(f->numer);
     }
   return ring_elem(make_elem(top, bottom));
 }
-ring_elem LocalRing::power(const ring_elem a, mpz_t n) const
+ring_elem LocalRing::power(const ring_elem a, mpz_srcptr n) const
 {
-  local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   ring_elem top, bottom;
   if (mpz_sgn(n) >= 0)
     {
@@ -585,18 +579,16 @@ ring_elem LocalRing::power(const ring_elem a, mpz_t n) const
     }
   else
     {
-      mpz_neg(n, n);
-      if (is_unit(a))
+      mpz_t negative_n;
+      mpz_init(negative_n);
+      mpz_neg(negative_n, n);
+      if (not is_unit(a))
         {
-          top = mRing->power(f->denom, n);
-          bottom = mRing->power(f->numer, n);
+          throw exc::engine_error("attempt to divide by a non-unit");
         }
-      else
-        {
-          ERROR("attempt to divide by non-unit");
-          return zero();
-        }
-      mpz_neg(n, n);
+      top = mRing->power(f->denom, negative_n);
+      bottom = mRing->power(f->numer, negative_n);
+      mpz_clear(negative_n);
 
       if (mRing->is_zero(bottom)) return set_non_unit_frac(f->numer);
     }
@@ -605,11 +597,10 @@ ring_elem LocalRing::power(const ring_elem a, mpz_t n) const
 
 ring_elem LocalRing::invert(const ring_elem a) const
 {
-  local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   if (mRing->is_zero(f->numer) || !is_unit(a))
     {
-      ERROR("attempt to invert a non-unit");
-      return zero();
+      throw exc::engine_error("attempt to invert a non-unit");
     }
   ring_elem top = mRing->copy(f->denom);
   ring_elem bottom = mRing->copy(f->numer);
@@ -618,8 +609,8 @@ ring_elem LocalRing::invert(const ring_elem a) const
 
 ring_elem LocalRing::divide(const ring_elem a, const ring_elem b) const
 {
-  local_elem *f = a.local_val;
-  local_elem *g = b.local_val;
+  const local_elem *f = a.get_local_elem();
+  const local_elem *g = b.get_local_elem();
   ring_elem top, bottom;
   if (is_unit(b))
     {
@@ -628,8 +619,7 @@ ring_elem LocalRing::divide(const ring_elem a, const ring_elem b) const
     }
   else
     {
-      ERROR("attempt to divide by non-unit");
-      return zero();
+      throw exc::engine_error("attempt to divide by a non-unit");
     }
   return ring_elem(make_elem(top, bottom));
 }
@@ -662,7 +652,7 @@ ring_elem LocalRing::eval(const RingMap *map,
 {
   ring_elem top, bottom, result;
   const Ring *S = map->get_ring();
-  const local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   top = mRing->eval(map, f->numer, first_var);
   if (S->is_zero(top)) return top;
   bottom = mRing->eval(map, f->denom, first_var);
@@ -670,9 +660,7 @@ ring_elem LocalRing::eval(const RingMap *map,
     result = S->divide(top, bottom);
   else
     {
-      if (not error())  // FIXME: keep this?
-        ERROR("attempt to divide by non-unit");
-      result = S->from_long(0);
+      throw exc::engine_error("attempt to divide by a non-unit");
     }
   S->remove(top);
   S->remove(bottom);
@@ -682,7 +670,7 @@ ring_elem LocalRing::eval(const RingMap *map,
 int LocalRing::n_fraction_vars() const { return mRing->n_vars(); }
 int LocalRing::n_terms(const ring_elem a) const
 {
-  return mRing->n_terms(a.local_val->numer);
+  return mRing->n_terms(a.get_local_elem()->numer);
 }
 ring_elem LocalRing::term(const ring_elem a, const int *) const
 {
@@ -713,7 +701,7 @@ void LocalRing::elem_text_out(buffer &o,
                               bool p_plus,
                               bool p_parens) const
 {
-  local_elem *f = a.local_val;
+  const local_elem *f = a.get_local_elem();
   int denom_one = mRing->is_equal(f->denom, mRing->one());
 
   p_one = p_one || !denom_one;
@@ -729,7 +717,7 @@ void LocalRing::elem_text_out(buffer &o,
 
 unsigned int LocalRing::computeHashValue(const ring_elem f) const
 {
-  local_elem *g = f.local_val;
+  const local_elem *g = f.get_local_elem();
   return (16473 * mRing->computeHashValue(g->numer) +
           7698908 * mRing->computeHashValue(g->denom));
 }
@@ -738,10 +726,12 @@ unsigned int LocalRing::computeHashValue(const ring_elem f) const
 /*                               Global functions */
 /********************************************************************************/
 
+extern "C" { // TODO: remove when this function is in e/interface
+
 Matrix *rawLiftLocalMatrix(const Ring *R, const Matrix *f)
 {
   const LocalRing *L = f->get_ring()->cast_to_LocalRing();
-  if (L == 0)
+  if (L == nullptr)
     {
       ERROR("expected an object over a local ring");
       return nullptr;
@@ -760,13 +750,15 @@ Matrix *rawLiftLocalMatrix(const Ring *R, const Matrix *f)
 M2_bool rawIsLocalUnit(const RingElement *f)
 {
   const LocalRing *L = f->get_ring()->cast_to_LocalRing();
-  if (L == 0)
+  if (L == nullptr)
     {
       ERROR("expected an object over a local ring");
       return false;
     }
   return L->is_unit(f->get_value());
 }
+
+} // TODO: remove when this function is in e/interface
 
 // Local Variables:
 // compile-command: "make -C $M2BUILDDIR/Macaulay2/e "

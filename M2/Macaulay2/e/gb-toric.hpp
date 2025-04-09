@@ -1,4 +1,5 @@
 // Copyright 1997  Michael E. Stillman
+// TODO: determine the monomial type of (int *)'s in this file
 
 #ifndef _gbbinom_hh_
 #define _gbbinom_hh_
@@ -18,7 +19,7 @@ struct binomial : public our_new_delete
   monomial0 lead;
   monomial0 tail;
 
-  binomial() : lead(NULL), tail(NULL) {}
+  binomial() : lead(nullptr), tail(nullptr) {}
   binomial(monomial0 lead0, monomial0 tail0) : lead(lead0), tail(tail0) {}
 };
 
@@ -30,7 +31,7 @@ struct binomial_gb_elem : public our_new_delete
                               // this lead term.
   binomial f;
 
-  binomial_gb_elem(binomial ff) : next(NULL), smaller(NULL), f(ff) {}
+  binomial_gb_elem(binomial ff) : next(nullptr), smaller(nullptr), f(ff) {}
 };
 
 struct binomial_s_pair : public our_new_delete
@@ -78,13 +79,13 @@ class binomial_ring : public our_new_delete
 
   // monomial operations
   void remove_monomial(monomial0 &m) const;
-  monomial0 make_monomial(
-      int *exp) const;  // Make a monomial from an exponent vector
+  // Make a monomial from an exponent vector
+  monomial0 make_monomial(const_exponents exp) const;
   monomial0 copy_monomial(monomial0 m) const;
 
   int weight(monomial0 m) const;
   int degree(monomial0 m) const;
-  unsigned int mask(monomial0 m) const;
+  unsigned int mask(const_exponents m) const;
   bool divides(monomial0 m, monomial0 n) const;
 
   monomial0 quotient(monomial0 m, monomial0 n) const;
@@ -108,7 +109,7 @@ class binomial_ring : public our_new_delete
   binomial make_binomial() const;  // allocates the monomials
   binomial copy_binomial(const binomial &f) const;
 
-  const monomial0 lead_monomial(binomial f) const { return f.lead; }
+  monomial0 lead_monomial(binomial f) const { return f.lead; }
   void translate_binomial(const binomial_ring *old_ring, binomial &f) const;
 
   bool gcd_is_one(monomial0 m, monomial0 n) const;
@@ -125,7 +126,7 @@ class binomial_ring : public our_new_delete
   bool one_reduction_step(binomial &f, binomial g) const;
   bool calc_s_pair(binomial_s_pair &s, binomial &result) const;
 
-  void monomial_out(buffer &o, const monomial0 m) const;
+  void monomial_out(buffer &o, const_exponents m) const;
   void elem_text_out(buffer &o, const binomial &f) const;
 };
 
@@ -155,7 +156,7 @@ class binomial_s_pair_set : public our_new_delete
     binomial_gb_elem *f1;
     binomial_gb_elem *f2;
     s_pair_elem(binomial_gb_elem *ff1, binomial_gb_elem *ff2)
-        : next(NULL), f1(ff1), f2(ff2)
+        : next(nullptr), f1(ff1), f2(ff2)
     {
     }
   };
@@ -167,8 +168,8 @@ class binomial_s_pair_set : public our_new_delete
 
   // Stats for number of pairs:
   int _max_degree;
-  intarray
-      _npairs;  // npairs[2*d] = total # of pairs.  npairs[2*d+1] = number left
+  // npairs[2*d] = total # of pairs.  npairs[2*d+1] = number left
+  gc_vector<int> _npairs;
 
   void remove_lcm_list(s_pair_lcm_list *p);
   void remove_pair_list(s_pair_degree_list *p);
@@ -256,12 +257,12 @@ class binomialGB : public our_new_delete
       return *this;
     }
     binomial_gb_elem *operator*() { return elem->elem; }
-    bool operator==(const iterator &p) { return p.elem == elem; }
-    bool operator!=(const iterator &p) { return p.elem != elem; }
+    bool operator==(const iterator &p) const { return p.elem == elem; }
+    bool operator!=(const iterator &p) const { return p.elem != elem; }
   };
 
   iterator begin() const { return iterator(first); }
-  iterator end() const { return iterator(NULL); }
+  iterator end() const { return iterator(nullptr); }
   int n_masks() const;
   void debug_display() const;
 };
@@ -280,8 +281,8 @@ class binomialGB_comp : public GBComputation
   binomial_ring *R;
   binomial_s_pair_set *Pairs;  // Pairs and Generators
   binomialGB *Gmin;
-  array<binomial_gb_elem *> Gens;  // All of the generators
-  array<binomial_gb_elem *> G;  // All of the binomial_gb_elem's in one place.
+  VECTOR(binomial_gb_elem *) Gens;  // All of the generators
+  VECTOR(binomial_gb_elem *) G;  // All of the binomial_gb_elem's in one place.
 
   int top_degree;
 
@@ -311,11 +312,11 @@ class binomialGB_comp : public GBComputation
   // monomial masks.  Currently, using monideals is not yet
   // implemented, so this is 'false'.
 
-  array<binomial_gb_elem *> mingens;
+  VECTOR(binomial_gb_elem *) mingens;
   // Only valid for homogeneous case.  These point to GB elements
   // so don't free them by accident!
 
-  array<binomial_gb_elem *> mingens_subring;  // Same comment applies here!
+  VECTOR(binomial_gb_elem *) mingens_subring;  // Same comment applies here!
 
   void process_pair(binomial_s_pair p);
   ComputationStatusCode gb_done() const;
@@ -360,7 +361,7 @@ class binomialGB_comp : public GBComputation
 
   virtual const Ring *get_ring() const
   {
-    return 0;
+    return nullptr;
   } /* doesn't have a ring !!  */
   virtual const Matrix /* or null */ *get_gb();
 

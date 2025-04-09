@@ -7,8 +7,6 @@
 #include <M2/config.h>
 #include <M2/gc-include.h>
 #include <stddef.h>
-#include <gmp.h>
-#include <mpfr.h>
 #include "ntl-interface.hpp"
 
 void ntl_ZZ_to_mpz(mpz_t result, const NTL::ZZ &a)
@@ -34,7 +32,7 @@ void ntl_ZZ_to_mpz(mpz_t result, const NTL::ZZ &a)
   if (is_neg) mpz_neg(result, result);
 }
 
-NTL::ZZ ntl_ZZ_from_mpz(mpz_t a)
+NTL::ZZ ntl_ZZ_from_mpz(mpz_srcptr a)
 {
   int sgn = mpz_sgn(a);
   if (sgn == 0) return NTL::ZZ::zero();
@@ -54,7 +52,7 @@ NTL::mat_ZZ *makeNTLMatrixZZ(int nrows, int ncols)
   return X;
 }
 
-void mat_ZZ_set_entry(NTL::mat_ZZ *A, long i, long j, mpz_t a)
+void mat_ZZ_set_entry(NTL::mat_ZZ *A, long i, long j, mpz_srcptr a)
 {
   NTL::ZZ b = ntl_ZZ_from_mpz(a);
   (*A)(i + 1, j + 1) = b;

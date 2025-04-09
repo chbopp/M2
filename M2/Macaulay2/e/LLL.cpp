@@ -1,17 +1,18 @@
 // Copyright 1998  Michael E. Stillman
 
 #include "LLL.hpp"
+
 #include "relem.hpp"
 #include "matrix.hpp"
-#include "frac.hpp"
 #include "text-io.hpp"
 #include "interrupted.hpp"
+
 bool LLLoperations::checkThreshold(ring_elem num, ring_elem den)
 {
   // Makes sure that 1/4 < num/den <= 1
   // Assumed: num, den are elements of ZZ.
-  mpz_ptr a = num.get_mpz();
-  mpz_ptr b = den.get_mpz();
+  mpz_srcptr a = num.get_mpz();
+  mpz_srcptr b = den.get_mpz();
   if (mpz_sgn(a) < 0) return false;
   if (mpz_sgn(b) < 0) return false;
   if (mpz_cmp(a, b) > 0) return false;  // return false if a>b.
@@ -29,7 +30,7 @@ bool LLLoperations::initializeLLL(const MutableMatrix *A,
                                   MutableMatrix *&LLLstate)
 {
   // First check m: should be a matrix over globalZZ.
-  if (A == 0 || A->get_ring() != globalZZ)
+  if (A == nullptr || A->get_ring() != globalZZ)
     {
       ERROR("LLL only defined for matrices over ZZ");
       return false;
@@ -115,8 +116,8 @@ void LLLoperations::REDI(int k,
   ring_elem Dl, mkl, q;
   if (!lambda->get_entry(ell, k, mkl)) return;
   lambda->get_entry(ell, ell, Dl);
-  mpz_ptr a = mkl.get_mpz();
-  mpz_ptr b = Dl.get_mpz();  // b = D#ell
+  mpz_srcptr a = mkl.get_mpz();
+  mpz_srcptr b = Dl.get_mpz();  // b = D#ell
   mpz_t c, d;
   mpz_init(c);
   mpz_init(d);
@@ -126,7 +127,7 @@ void LLLoperations::REDI(int k,
   mpz_mul_2exp(d, b, 1);  // d = 2*D#ell
   mpz_fdiv_q(c, c, d);    // c = (almost) final q
   mpz_neg(c, c);
-  q = c;
+  q = ring_elem(c);
 
   // A->addColumnMultiple(ell,q,k);
   // lambda->addColumnMultiple(ell,q,k);
@@ -361,7 +362,7 @@ bool LLLoperations::LLL(MutableMatrix *A,
   int ret = doLLL(A, Achange, LLLstate);
   if (ret != COMP_DONE)
     {
-      deleteitem(LLLstate);
+      freemem(LLLstate);
       return false;
     }
   return true;

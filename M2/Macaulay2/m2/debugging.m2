@@ -1,9 +1,7 @@
 --		Copyright 1993-2002 by Daniel R. Grayson
 
-symbolLocation = s -> (
-     t := locate s;
-     if t =!= null then t#0 | ":" | toString t#1| ":" | toString (t#2+1) | "-" | toString t#3| ":" | toString (t#4+1)
-     else "")
+needs "nets.m2"
+needs "methods.m2"
 
 processArgs := args -> concatenate (
      args = sequence args;
@@ -12,7 +10,7 @@ processArgs := args -> concatenate (
 	  else if class x === Symbol then ("'", toString x, "'")
 	  else silentRobustString(40,3,x)
 	  ),
-     apply(args, x -> if class x === Symbol then ("\n", symbolLocation x, ": here is the first use of '",toString x, "'") else "")
+     apply(args, x -> if class x === Symbol then ("\n", toString locate x, ": here is the first use of '",toString x, "'") else "")
      )
 olderror := error
 error = args -> (
@@ -116,6 +114,12 @@ net Descent := x -> stack sort apply(pairs x,
 	  then net k
 	  else net k | " : " | net v
 	  ))
+texMath Descent := x -> "\\left|\\begin{array}{l}" | concatenate sort apply(pairs x,
+     (k,v) -> (
+	  if #v === 0
+	  then texMath net k -- sucks but no choice
+	  else texMath net k | " : " | texMath v
+	  ) | "\\\\") | "\\end{array}\\right."
 justTypes := syms -> select(apply(syms, value), s -> instance(s, Type))
 allThingsWithNames := syms -> select(apply(syms, value), s -> hasAttribute(s,ReverseDictionary))
      
@@ -128,9 +132,9 @@ show1(Sequence,Function) := show1(List,Function) := (types,pfun) -> (
 	       or pfun === class and v === Type
 	       then world
 	       else install pfun v);
-	  if hasAttribute(v,PrintNet) then v = getAttribute(v,PrintNet) else
-	  if hasAttribute(v,PrintNames) then v = getAttribute(v,PrintNames) else
-	  if hasAttribute(v,ReverseDictionary) then v = getAttribute(v,ReverseDictionary);
+--	  if hasAttribute(v,PrintNet) then v = getAttribute(v,PrintNet) else
+--	  if hasAttribute(v,PrintNames) then v = getAttribute(v,PrintNames) else
+--	  if hasAttribute(v,ReverseDictionary) then v = getAttribute(v,ReverseDictionary);
 	  if w#?v then w#v else w#v = new Descent
 	  );
      scan(types, install);
@@ -145,14 +149,13 @@ allValues = () -> unique join(flatten(values \ dictionaryPath), select(getAttrib
 	  ))
 showStructure = Command(types -> show1(if types === () then justTypes allValues() else types, parent))
 showClassStructure = Command(types -> show1(if types === () then allThingsWithNames allValues() else types, class))
-ancestors = X -> while true list (local Z; if Z === Thing then break ; Z = X; X = parent X; Z)
 -----------------------------------------------------------------------------
 
 typicalValues#frame = MutableList
 
 select2 := (type,syms) -> apply(
      sort apply(
-	  select(syms, sym -> mutable sym and instance(value sym,type) and value sym =!= sym),
+	  select(syms, sym -> isMutable sym and instance(value sym,type) and value sym =!= sym),
 	  symb -> (hash symb, symb)
 	  ),
      (h,s) -> s)
@@ -178,16 +181,13 @@ localSymbols(Type,Pseudocode) := (X,f) -> select2(X,localSymbols f)
 
 localSymbols Type := X -> select2(X,localSymbols ())
 
-robust := y -> silentRobustNet(55,4,3,y)
-abbreviate := x -> (
-     if instance(x, Function) and match("^--Function.*--$", toString x) then "..."
-     else robust x)
 listSymbols = method()
 listSymbols Dictionary := d -> listSymbols values d
-listSymbols List := x -> (
-     netList(Boxes=>false, HorizontalSpace => 1, prepend(
-	  {"symbol" || "------","", "class" || "-----", "", "value" || "-----", "location of symbol" || "------------------"},
-	  apply (x, s -> {toString s,":", robust class value s, "--", abbreviate value s, symbolLocation s}))))
+listSymbols List := x -> TABLE prepend(
+    apply({"symbol", "class", "value", "location of symbol"},s->TH {s}),
+    apply(x, y -> apply({y,Abbreviate {class value y},Abbreviate {value y},locate y},s->TD {s}))
+    );
+
 
 listLocalSymbols = Command(f -> listSymbols localSymbols f)
 
@@ -204,11 +204,12 @@ clearAll = Command (() -> (
 	  ))
 
 generateAssertions = method(TypicalValue => Net)
-generateAssertions String := s -> generateAssertions select(lines s, x -> not match("^[[:space:]]*(--.*)?$",x))
+generateAssertions String := s -> generateAssertions select(
+    lines replace("-\\*(.|\n)*?\\*-", "", s), x -> not match("^[[:space:]]*(--.*)?$",x))
 generateAssertions List := y -> (
      nogens := {PolynomialRing, QuotientRing,Function};
      good := t -> (
-	  not mutable t
+	  not isMutable t
 	  and
 	  all(nogens, X -> not instance(t,X))
 	  );
@@ -231,6 +232,32 @@ generateAssertions List := y -> (
 		    )
 	       else lin
 	       )))^-1
+
+-- FilePosition = new Type of BasicList -- defined in d
+FilePosition.synonym = "file position"
+toExternalString FilePosition :=
+toString FilePosition :=
+net FilePosition := p -> concatenate(
+    if match(" ", p#0) then format p#0 else p#0,
+    ":",toString p#1,":",toString p#2,
+    if #p>3 then ("-",toString p#3,":",toString p#4),
+--    if #p>5 then (" (",toString p#5,":",toString p#6,")")
+    )
+currentPosition = () -> new FilePosition from { currentFileName, currentRowNumber(), currentColumnNumber() }
+
+locate' = locate -- defined in d/actors4.d
+locate = method(Dispatch => Thing, TypicalValue => FilePosition)
+locate Nothing     :=
+locate FunctionBody:=
+locate Function    :=
+locate Pseudocode  :=
+locate Sequence    :=
+locate Symbol      := FilePosition => locate'
+locate Command     := FilePosition => C -> locate'(C#0)
+locate List        := List     => x -> apply(x, locate)
+protect symbol locate
+
+sortByLocation = sortBy(toString @@ locate)
 
 -- Local Variables:
 -- compile-command: "make -C $M2BUILDDIR/Macaulay2/m2 "

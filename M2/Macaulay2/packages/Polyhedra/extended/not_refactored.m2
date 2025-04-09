@@ -7,20 +7,20 @@
 
 
 -- PURPOSE : Computing the state polytope of the ideal 'I'
---   INPUT : 'I',  a homogeneous ideal with resect to some strictly psoitive grading
+--   INPUT : 'I',  a homogeneous ideal with resect to some strictly positive grading
 --  OUTPUT : The state polytope as a polyhedron
 statePolytope = method(TypicalValue => Polyhedron)
 statePolytope Ideal := I -> (
    -- Check if there exists a strictly positive grading such that 'I' is homogeneous with
    -- respect to this grading
    homogeneityCheck := I -> (
-      -- Generate the matrix 'M' that spans the space of the differeneces of the 
+      -- Generate the matrix 'M' that spans the space of the differences of the 
       -- exponent vectors of the generators of 'I'
       L := flatten entries gens I;
       lt := apply(L, leadTerm);
       M := matrix flatten apply(#L, i -> apply(exponents L#i, e -> (flatten exponents lt#i)-e));
       -- intersect the span of 'M' with the positive orthant
-      C := intersection(map(source M,source M,1),M);
+      C := coneFromHData(map(source M,source M,1),M);
       -- Check if an interior vector is strictly positive
       v := interiorVector C;
       (all(flatten entries v, e -> e > 0),v)
@@ -34,7 +34,7 @@ statePolytope Ideal := I -> (
       lt = flatten entries lt;
       L := matrix flatten apply(#g, i -> apply(exponents g#i, e -> (flatten exponents lt#i)-e));
       -- intersect the differences
-      intersection L
+      coneFromHData L
    );
    wLeadTerm := (w,I) -> (
       -- Compute the Groebner basis and their leading terms of 'I' with respect to the weight 'w'
@@ -138,7 +138,7 @@ statePolytope Ideal := I -> (
 -- PURPOSE : Computing the closest point of a polyhedron to a given point
 --   INPUT : (p,P),  where 'p' is a point given by a one column matrix over ZZ or QQ and
 --                   'P' is a Polyhedron
---  OUTPUT : the point in 'P' with the minimal euclidian distance to 'p'
+--  OUTPUT : the point in 'P' with the minimal euclidean distance to 'p'
 proximum = method(TypicalValue => Matrix)
 proximum (Matrix,Polyhedron) := (p,P) -> (
      -- Checking for input errors
@@ -228,7 +228,7 @@ proximum (Matrix,Polyhedron) := (p,P) -> (
 
 --   INPUT : (p,C),  where 'p' is a point given by a one column matrix over ZZ or QQ and
 --                   'C' is a Cone
---  OUTPUT : the point in 'C' with the minimal euclidian distance to 'p'
+--  OUTPUT : the point in 'C' with the minimal euclidean distance to 'p'
 proximum (Matrix,Cone) := (p,C) -> proximum(p,polyhedron C)
 
 
@@ -243,7 +243,7 @@ compute#Fan#polytopal Fan := F -> (
       -- Extracting the generating cones, the ambient dimension, the codim 1 
       -- cones (corresponding to the edges of the polytope if it exists)
       i := 0;
-      L := hashTable apply(getProperty(F, honestMaxObjects), l -> (i=i+1; i=>l));
+      L := hashTable apply(values getProperty(F, honestMaxObjects), l -> (i=i+1; i=>l));
       n := ambDim(F);
       edges := cones(n-1,F);
       raysF := rays F;
@@ -265,7 +265,7 @@ compute#Fan#polytopal Fan := F -> (
       edgeTCNoTable := hashTable apply(edgeTable, e -> e#0 => (e#2,e#3));
       edgeTable = hashTable apply(edgeTable, e -> e#1 => (e#2,e#3));
       -- Computing the list of correspondencies, i.e. for each codim 2 cone ( corresponding to 2dim-faces of the polytope) save 
-      -- the indeces of the top cones containing it
+      -- the indices of the top cones containing it
       corrList := hashTable {};
       scan(keys L, 
          j -> (
@@ -282,7 +282,7 @@ compute#Fan#polytopal Fan := F -> (
          j -> (
             v := corrList#j#1;
             hyperplanesTmpnew := map(ZZ^n,ZZ^m,0);
-            -- Scanning trough the top cones containing the active codim2 cone and order them in a circle by their 
+            -- Scanning through the top cones containing the active codim2 cone and order them in a circle by their
             -- connecting edges
             v = apply(v, e -> L#e);
             C := v#0;

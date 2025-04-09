@@ -1,6 +1,7 @@
 --- status: DRAFT
 --- author(s): MES
 --- notes: what should 'ambient Ring' do??
+---        what about 'ambient Ideal'? ideal 1_R seems suitable (Mahrud)
 
 document { 
      Key => ambient,
@@ -54,7 +55,7 @@ document {
      SeeAlso => {}
      }
 document { 
-     Key => (ambient,Module),
+     Key => {(ambient, Module), (ambient, GradedModule)},
      Headline => "ambient free module",
      Usage => "ambient M",
      Inputs => {
@@ -90,7 +91,7 @@ document {
      }
 document { 
      Key => (ambient,Matrix),
-     Headline => "",
+     Headline => "get the map between the ambient free modules",
      Usage => "ambient f",
      Inputs => {
 	  "f" => "M --> N, where M is a free module or quotient of a free module F.",

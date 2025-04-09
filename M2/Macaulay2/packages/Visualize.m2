@@ -3,7 +3,7 @@
 -- visualize various algebraic objects in javascript using a 
 -- modern browser.
 --
--- Copyright (C) 2016 Brett Barwick, Thomas Enkosky, Branden Stone and Jim Vallandingham
+-- Copyright (C) 2017 Brett Barwick, Thomas Enkosky, Branden Stone and Jim Vallandingham
 --
 -- This program is free software; you can redistribute it and/or
 -- modify it under the terms of the GNU General Public License version 2
@@ -18,20 +18,21 @@
 
 newPackage(
 	"Visualize",
-    	Version => "0.8", 
-    	Date => "June 1, 2016",
+	Version => "1.6",
+	Date => "October 28, 2024",
     	Authors => {       
      	     {Name => "Brett Barwick", Email => "bbarwick@uscupstate.edu", HomePage => "http://faculty.uscupstate.edu/bbarwick/"},	     
-	     {Name => "Thomas Enkosky", Email => "tomenk@bu.edu", HomePage => "http://math.bu.edu/people/tomenk"},	     
+	     {Name => "Thomas Enkosky", Email => "tomenk@bu.edu", HomePage => "http://math.bu.edu/people/tomenk/"},	     
 	     {Name => "Branden Stone", Email => "bstone@adelphi.edu", HomePage => "http://math.adelpi.edu/~bstone/"},
-	     {Name => "Jim Vallandingham", Email => "vlandham@gmail.com", HomePage => "http://vallandingham.me/"}
+	     {Name => "Jim Vallandingham", Email => "vlandham@gmail.com", HomePage => "http://vallandingham.me/"},
+	     {Name => "Doug Torrance", Email => "dtorrance@piedmont.edu", HomePage => "https://webwork.piedmont.edu/~dtorrance"}
 -- Contributing Author	     {Name => "Ata Firat Pir", Email => "atafirat@math.tamu.edu"},	     
 -- Contributing Author	     {Name => "Elliot Korte", Email => "ek2872@bard.edu"},	     
 -- Contributing Author	     {Name => "Will Smith", Email => "smithw12321@gmail.com"},		
 -- Contributing Author	     {Name => "Julio Urenda", Email => "jcurenda@nmsu.edu"},	     
 	     },
-    	Headline => "Visualize",
-    	DebuggingMode => false,
+    	Headline => "interactive visualization and manipulation of combinatorial objects in a browser",
+	Keywords => {"Graphics"},
 	PackageExports => {"Graphs", "Posets", "SimplicialComplexes"},
 	AuxiliaryFiles => true,
 	Configuration => {"DefaultPath" => null } 
@@ -69,6 +70,7 @@ export {
 defaultPath = (options Visualize).Configuration#"DefaultPath"
 basePath = currentFileDirectory -- created this because copyJS would not handle 
     	    	    	    	-- currentFileDirectory for some reason.
+commonVisOpts = {VisPath => defaultPath, Warning => true, Verbose => false} -- list of common options for visualize method
 
 -- (options Visualize).Configuration
 
@@ -214,7 +216,8 @@ relHeightFunction(Poset) := P -> (
 --
 visualize = method(Options => true)
 
-visualize(Ideal) := {VisPath => defaultPath, Warning => true, VisTemplate => basePath |"Visualize/templates/visIdeal/visIdeal"} >> opts -> J -> (
+--{VisPath => defaultPath, Warning => true, VisTemplate => basePath |"Visualize/templates/visIdeal/visIdeal"} >> opts -> J -> (
+visualize(Ideal) := commonVisOpts|{VisTemplate => basePath |"Visualize/templates/visIdeal/visIdeal"} >> opts -> J -> ( 
     local R; local arrayList; local arrayString; local numVar; local visTemp;
     local varList; local newArrayList; local newArrayString;    
         
@@ -280,10 +283,13 @@ visualize(Ideal) := {VisPath => defaultPath, Warning => true, VisTemplate => bas
 
 --input: A graph
 --output: A visualization of the graph in the browser
-visualize(Graph) := {VisPath => defaultPath, VisTemplate => basePath | "Visualize/templates/visGraph/visGraph-template.html", Warning => true, Verbose => false} >> opts -> G -> (
+--{VisPath => defaultPath, VisTemplate => basePath | "Visualize/templates/visGraph/visGraph-template.html", Warning => true, Verbose => false} >> opts -> G -> (
+visualize(Graph) := commonVisOpts|{VisTemplate => basePath | "Visualize/templates/visGraph/visGraph-template.html"} >> opts -> G -> (
     local A; local arrayString; local vertexString; local visTemp;
     local keyPosition; local vertexSet; local browserOutput;
     
+    openPortTest();
+        
     A = adjacencyMatrix G;
     arrayString = toString toArray entries A; -- Turn the adjacency matrix into a nested array (as a string) to copy to the template html file.
     
@@ -330,9 +336,12 @@ visualize(Graph) := {VisPath => defaultPath, VisTemplate => basePath | "Visualiz
 
 -- Input: A digraph
 -- Output: A visualization of the digraph in the browser
-visualize(Digraph) := {Verbose => false, VisPath => defaultPath, VisTemplate => basePath |"Visualize/templates/visDigraph/visDigraph-template.html", Warning => true} >> opts -> G -> (
+--{Verbose => false, VisPath => defaultPath, VisTemplate => basePath |"Visualize/templates/visDigraph/visDigraph-template.html", Warning => true} >> opts -> G -> (
+visualize(Digraph) := commonVisOpts|{VisTemplate => basePath |"Visualize/templates/visDigraph/visDigraph-template.html"} >> opts -> G -> (
     local A; local arrayString; local vertexString; local visTemp;
     local keyPosition; local vertexSet; local browserOutput;
+
+    openPortTest();    
     
     A = adjacencyMatrix G;
     arrayString = toString toArray entries A; -- Turn the adjacency matrix into a nested array (as a string) to copy to the template html file.
@@ -383,12 +392,15 @@ visualize(Digraph) := {Verbose => false, VisPath => defaultPath, VisTemplate => 
 
 -- Input: A poset
 -- Output: A visualization of the poset in the browser
-visualize(Poset) := {Verbose=>false,FixExtremeElements => false, VisPath => defaultPath, VisTemplate => basePath | "Visualize/templates/visPoset/visPoset-template.html", Warning => true} >> opts -> P -> (
+--{Verbose=>false,FixExtremeElements => false, VisPath => defaultPath, VisTemplate => basePath | "Visualize/templates/visPoset/visPoset-template.html", Warning => true} >> opts -> P -> (
+visualize(Poset) := commonVisOpts|{FixExtremeElements => false, VisTemplate => basePath | "Visualize/templates/visPoset/visPoset-template.html"} >> opts -> P -> (
 
     local labelList; local groupList; local relList; local visTemp;
     local numNodes; local labelString; local nodeString; local relationString;
     local relMatrixString; local fixExtremeEltsString; local browserOutput;
-    
+
+    openPortTest();
+        
     labelList = apply(P_*, i -> "'"|(toString i)|"'");
     
     labelString = toString new Array from labelList;
@@ -419,15 +431,18 @@ visualize(Poset) := {Verbose=>false,FixExtremeElements => false, VisPath => defa
 
 -- Input: A simplicial complex
 -- Output: A visualization of the simplicial complex in the browser
-visualize(SimplicialComplex) := {Verbose => false, VisPath => defaultPath, VisTemplate => basePath | "Visualize/templates/visSimplicialComplex/visSimplicialComplex2d-template.html", Warning => true} >> opts -> D -> (
+--{Verbose => false, VisPath => defaultPath, VisTemplate => basePath | "Visualize/templates/visSimplicialComplex/visSimplicialComplex2d-template.html", Warning => true} >> opts -> D -> (
+visualize(SimplicialComplex) := commonVisOpts|{VisTemplate => basePath | "Visualize/templates/visSimplicialComplex/visSimplicialComplex2d-template.html"} >> opts -> D -> (
     local vertexSet; local edgeSet; local face2Set; local face3Set; local visTemp;
     local vertexList; local edgeList; local face2List; local face3List;
     local vertexString; local edgeString; local face2String; local face3String;
     local visTemplate; local browserOutput;
-    
-    vertexSet = flatten entries faces(0,D);
-    edgeSet = flatten entries faces(1,D);
-    face2Set = flatten entries faces(2,D);
+
+    openPortTest();
+        
+    vertexSet = faces(0,D);
+    edgeSet = faces(1,D);
+    face2Set = faces(2,D);
     vertexList = apply(vertexSet, v -> apply(new List from factor v, i -> i#0));
     edgeList = apply(edgeSet, e -> apply(new List from factor e, i -> i#0));
     face2List = apply(face2Set, f -> apply(new List from factor f, i -> i#0));
@@ -461,7 +476,7 @@ visualize(SimplicialComplex) := {Verbose => false, VisPath => defaultPath, VisTe
         
     if dim D>2 then (
 	error "3-dimensional simplicial complexes not implemented yet.";
-	face3Set = flatten entries faces(3,D);
+	face3Set = faces(3,D);
 	face3List = apply(face3Set, f -> apply(new List from factor f, i -> i#0));
        	face3String = toString new Array from apply(#face3List, i -> {"\"v1\": "|toString(position(vertexSet, j -> j == face3List#i#3))|",\"v2\": "|toString(position(vertexSet, j -> j == face3List#i#2))|",\"v3\": "|toString(position(vertexSet, j -> j == face3List#i#1))|",\"v4\": "|toString(position(vertexSet, j -> j == face3List#i#0))});
 	searchReplace("vis3Faces",face3String, visTemp); -- Replace vis3Faces in the visSimplicialComplex html file by the list of faces. 
@@ -476,7 +491,7 @@ visualize(SimplicialComplex) := {Verbose => false, VisPath => defaultPath, VisTe
 
 -*
 --input: A parameterized surface in RR^3
---output: The surface in the browswer
+--output: The surface in the browser
 --
 visualize(List) := {VisPath => defaultPath, VisTemplate => basePath | "Visualize/templates/visSurface/Graphulus-Surface.html", Warning => true} >> opts -> P -> (
     local visTemp; local stringList;
@@ -511,75 +526,35 @@ visualize(List) := {VisPath => defaultPath, VisTemplate => basePath | "Visualize
 --        current files and cannot be undone.
 copyJS = method(Options => {Warning => true})
 copyJS(String) := opts -> dst -> (
-    local jsdir; local ans; local quest;
-    local cssdir; local fontdir; local imagedir;
-    local JS; local CSS; local FONT; local IMAGE;
-        
-    JS = "";
-    CSS = "";
-    FONT = "";
-    IMAGE = "";
-            
-    -- get list of filenames in js/
-    jsdir = delete("..",delete(".",
-	    readDirectory(basePath|"Visualize/js/")
-	    ));
+    if not match("/$", dst) then dst = dst | "/";
+    if not fileExists dst then makeDirectory dst;
 
-    -- get list of filenames in css/
-    cssdir = delete("..",delete(".",
-	    readDirectory(basePath|"Visualize/css/")
-	    ));
+    dirs := {"js", "css", "fonts", "images"};
+    existingDirs := select(dirs, dir -> fileExists concatenate(dst, dir));
 
-    -- get list of filenames in fonts/
-    fontdir = delete("..",delete(".",
-	    readDirectory(basePath|"Visualize/fonts/")
-	    ));
-
-    -- get list of filenames in images/    
-    imagedir = delete("..",delete(".",
-	    readDirectory(basePath|"Visualize/images/")
-	    ));
-
-    if opts.Warning == true
-    then (
-	scan(jsdir, j -> if fileExists(concatenate(dst,"js/",j)) then (JS = "js/"; break)); -- Tests existence of js files
-	scan(cssdir, j -> if fileExists(concatenate(dst,"css/",j)) then (CSS = "css/"; break)); -- Tests existence of css files
-	scan(fontdir, j -> if fileExists(concatenate(dst,"fonts/",j)) then (FONT ="fonts/"; break)); -- Tests existence of font files
-	scan(imagedir, j -> if fileExists(concatenate(dst,"images/",j)) then (IMAGE ="images/"; break)); -- Tests existence of images files
-	
-	-- test to see if files exist in target
-	if (
-	    JS == "js/"
-	    or CSS == "css/"
-	    or FONT == "fonts/"
-	    or IMAGE == "images/"
-	    )
-	then (
-		quest = concatenate(
-		    " -- Note: You can surpress this message with the 'Warning => false' option.\n",
-		    " -- The following folders on the path ",dst," have some files that will be overwritten: ",
-		    JS, ", ",
-		    CSS, ", ",
-		    FONT, ", ",
-		    IMAGE,". \n",
-		    " -- This action cannot be undone. \n"
-		    );
-		print quest;
-		ans = read " Would you like to continue? (y or n):  ";
-		while (ans != "y" and ans != "n") do (
-		    ans = read " Would you like to continue? (y or n):  ";
-		    );
-		if ans == "n" then (
-		    error "Process was aborted.";
-		    );
-		);
+    if #existingDirs > 0 and opts.Warning == true then (
+	print concatenate(
+	    " -- Note: You can suppress this message with the 'Warning => false' option.\n",
+	    " -- The following folders on the path ",dst," have some files that will be overwritten: ",
+	    demark(", ", existingDirs), newline,
+	    " -- This action cannot be undone.", newline);
+	ans := read " Would you like to continue? (y or n):  ";
+	while (ans != "y" and ans != "n") do (
+	    ans = read " Would you like to continue? (y or n):  ";
+	    );
+	if ans == "n" then (
+	    error "Process was aborted.";
+	    );
 	);
-    
-    copyDirectory(basePath|"Visualize/js/",dst|"js/");
-    copyDirectory(basePath|"Visualize/css/",dst|"css/");
-    copyDirectory(basePath|"Visualize/fonts/",dst|"fonts/");
-    copyDirectory(basePath|"Visualize/images/",dst|"images/");
-    
+
+    for dir in dirs do (
+	makeDirectory(dst | dir);
+	for file in readDirectory(basePath | "Visualize/" | dir) do (
+	    if not member(file, {".", ".."}) then (
+		copyFile(realpath(basePath | "Visualize/" | dir | "/" | file),
+		    dst | dir | "/" | file)))
+    );
+
     return "Created directories at "|dst;
 )
 
@@ -619,7 +594,7 @@ openPort String := F -> (
 	F = "$localhost:"|F;
 	inOutPort = openListener F;
 	print("--Port " | toString inOutPort | " is now open.");    
-	);  
+	);
 )
 
 --getCurrPath = method()
@@ -632,6 +607,16 @@ installMethod(closePort, () -> (
      print("--Port " | toString inOutPort | " is now closing. This could take a few seconds.");
      )
 )
+
+-- Input: none
+-- Output: Error is user trying to run 'visualize' without first opening a port.
+--
+openPortTest = method()
+installMethod(openPortTest, () -> (
+    	if (portTest == false ) then error("-- You must open a port with 'openPort()' before you can communicate with the browser.");
+     )
+)
+
 
 -- Input: File, an in-out port for communicating with the browser
 -- Output: Whatever the browser sends
@@ -650,7 +635,7 @@ server = () -> (
     stderr << "-- Visualizing. Your browser should open automatically." << endl <<  "-- Click 'End Session' in the browser when finished." << endl;
     while true do (
         wait {listener};
-        g := openInOut listener; -- this should be interruptable! (Dan's Comment, not sure what it means)
+        g := openInOut listener; -- this should be interruptible! (Dan's Comment, not sure what it means)
         r := read g;
         if opts.Verbose then stderr << "request: " << stack lines r << endl << endl;
         r = lines r;
@@ -770,14 +755,13 @@ server = () -> (
 	    u = toString( isTree dataValue );
 	)
 
-
 	-- isRigid
 	else if match("^POST /isRigid/(.*) ",r) then (
 	    -- testKey = "isRigid";
 	    fun = identity;
 	    u = toString( isRigid dataValue );
 	)    
-
+    
         -- isWeaklyConnected
 	else if match("^POST /isWeaklyConnected/(.*) ",r) then (
 	    -- testKey = "isWeaklyConnected";
@@ -1042,6 +1026,8 @@ return H;
 
 beginDocumentation()
 
+reldir = replace("PKG","Visualize",Layout#2#"package")	    -- this works just for installation in layouts of type 2, too bad.
+
 document {
      Key => Visualize,
      Headline => "A package to help visualize algebraic objects in the browser using javascript",
@@ -1056,14 +1042,12 @@ document {
      
      UL {
 	 {HREF("https://github.com/AndreaLombardo/BootSideMenu","BootSideMenu.js")},
-	 {HREF("https://github.com/dataarts/webgl-globe/blob/master/globe-vertex-texture/third-party/Three/Detector.js","Detectors.js")},
 	 {HREF("http://getbootstrap.com/","Bootstrap.js")},
 	 {HREF("https://clipboardjs.com/","clipboard.js")},
 	 {HREF("https://d3js.org/","D3.js")},
 	 {HREF("https://jquery.com/","jQuery")},
 	 {HREF("http://refreshless.com/nouislider/","noUiSlider.js")},
-	 {HREF("https://github.com/mrdoob/three.js/","Three.js")},
-	 {HREF("http://underscorejs.org/","Underscore.js")}
+	 {HREF("https://github.com/mrdoob/three.js/","Three.js")}
 	},
          
      
@@ -1088,12 +1072,12 @@ document {
      some features may require you to open the links in a new tab.",
      
      UL {
-	 {HREF(replace("PKG","Visualize",currentLayout#"package")|"graph-example.html","Visualize Graphs example")},
-	 {HREF(replace("PKG","Visualize",currentLayout#"package")|"digraph-example.html","Visualize Digraphs example")},	 
-	 {HREF(replace("PKG","Visualize",currentLayout#"package")|"poset-example.html","Visualize Posets example")},	  
-	 {HREF(replace("PKG","Visualize",currentLayout#"package")|"simplicial-complex-example.html","Visualize Simplicial Complexes example")},	 
-	 {HREF(replace("PKG","Visualize",currentLayout#"package")|"ideal2d-example.html","Visualize Ideals in 2 variables example")},	 
-	 {HREF(replace("PKG","Visualize",currentLayout#"package")|"ideal3d-example.html","Visualize Ideals in 3 variables example")}
+	 {HREF(reldir|"graph-example.html","Visualize Graphs example")},
+	 {HREF(reldir|"digraph-example.html","Visualize Digraphs example")},	 
+	 {HREF(reldir|"poset-example.html","Visualize Posets example")},	  
+	 {HREF(reldir|"simplicial-complex-example.html","Visualize Simplicial Complexes example")},	 
+	 {HREF(reldir|"ideal2d-example.html","Visualize Ideals in 2 variables example")},	 
+	 {HREF(reldir|"ideal3d-example.html","Visualize Ideals in 3 variables example")}
         },
 
      SUBSECTION "Methods and Workflow",
@@ -1267,10 +1251,10 @@ document {
      PARA {"At this point we wish to visualize ", TT "G", ". To do this simply execute ", TT "H = visualize G", " and 
      browser will open with interactive image. You can view this image in the link below."},
      
-     PARA {HREF(replace("PKG","Visualize",currentLayout#"package")|"graph-example.html","Visualize Graphs example")},
+     PARA {HREF(reldir|"graph-example.html","Visualize Graphs example")},
      
      -- make sure this image matches the graph in the example. 
---     PARA IMG ("src" => replace("PKG","Visualize",currentLayout#"package")|"images/Visualize/Visualize_Graph1.png", "alt" => "Original graph entered into M2"), 
+--     PARA IMG ("src" => reldir|"images/Visualize/Visualize_Graph1.png", "alt" => "Original graph entered into M2"), 
      
      
      PARA {"Once finished with a session, you can keep visualizing. For example if you were to say ", TT "H = visualize G", ", once you 
@@ -1299,7 +1283,7 @@ document {
 	 {BOLD "Highlight Neighbors: ", "Allows you to see the neighbors of a vertex when selected.", BR{}, BR{}}, 
 	 
 	 {BOLD "Reset Nodes: ", "When you move a vertex, it will pin it to the canvas. If you have pinned a node to the canvas, you can 
-	     undo this process by reseting the nodes. Clicking this will reset all nodes.", BR{}, BR{}}, 
+	     undo this process by resetting the nodes. Clicking this will reset all nodes.", BR{}, BR{}}, 
 	     
 	 {BOLD "Turn off force: ", "The force is what creates the charges on the nodes. Turning this off will make the vertices 
 	     not repel each other.", BR{}, BR{}}, 
@@ -1326,9 +1310,9 @@ document {
 	 },
 	
      
---     PARA IMG ("src" => replace("PKG","Visualize",currentLayout#"package")|"images/Visualize/Visualize_Graph2.png", "alt" => "Original graph entered into M2"), 
+--     PARA IMG ("src" => reldir|"images/Visualize/Visualize_Graph2.png", "alt" => "Original graph entered into M2"), 
 
-     
+    Caveat => {"When the graph is exported back to Macaulay2 after ending the visualization session, all vertices are represented as strings.  To recover the values of these labels (for example, if they have numeric values or represent ring variables), use the command ", TT "value first toString G", "."},
      
     SeeAlso => {
 	 "Basic Workflow for Visualize",
@@ -1360,7 +1344,7 @@ document {
      
      PARA {"In order to visualize this, simply type ", TT "visualize I", " and the following example will appear in the browser."},
      
-     PARA {HREF(replace("PKG","Visualize",currentLayout#"package")|"ideal2d-example.html","Visualize ideal in 2 variables example")},     
+     PARA {HREF(reldir|"ideal2d-example.html","Visualize ideal in 2 variables example")},     
      
      EXAMPLE {
 	 "R = QQ[x,y,z]",
@@ -1369,7 +1353,7 @@ document {
      
      PARA {"In order to visualize this, simply type ", TT "visualize J", " and the following example will appear in the browser."},  
      
-     PARA {HREF(replace("PKG","Visualize",currentLayout#"package")|"ideal3d-example.html","Visualize ideal in 3 variables example")},             
+     PARA {HREF(reldir|"ideal3d-example.html","Visualize ideal in 3 variables example")},             
      
      Caveat => {"Visualizing ideals is still in development so please be gentle with it."},     
      
@@ -1407,10 +1391,10 @@ document {
      PARA {"At this point we wish to visualize ", TT "D", ". To do this simply execute ", TT "H = visualize D", " and 
      browser will open with interactive image. You can view this image in the link below."},
      
-     PARA {HREF(replace("PKG","Visualize",currentLayout#"package")|"digraph-example.html","Visualize Digraphs example")},
+     PARA {HREF(reldir|"digraph-example.html","Visualize Digraphs example")},
      
      -- make sure this image matches the graph in the example. 
---     PARA IMG ("src" => replace("PKG","Visualize",currentLayout#"package")|"images/Visualize/Visualize_Graph1.png", "alt" => "Original graph entered into M2"), 
+--     PARA IMG ("src" => reldir|"images/Visualize/Visualize_Graph1.png", "alt" => "Original graph entered into M2"), 
      
      
      PARA {"Once finished with a session, you can keep visualizing. For example if you were to say ", TT "H = visualize D", ", once you 
@@ -1432,18 +1416,16 @@ document {
 	 {BOLD "Enable Editing: ", "In the browser, you can edit the digraph (add/delete vertices or edges) by clicking ", TT "Enable Editing",
 	      ".  For example, in order to remove the edges ", TT "{0,1}", " and ", TT "{1,3}", " click on 'Enable Editing' and select 
 	      the edges and press delete on the keyboard. You may also add vertices and edges with the mouse/trackpad. When editing is enabled,
-	      you can move the vertices around by holding down the shift key. Further, to create a loop, select a node and press the 'r' key. 
-	      When an edge is selected, you may press the 'l', 'r', and 'b' keys to change the edge to a left-, right-, or two-sided edge, 
-	      respectively.", 
+	      you can move the vertices around by holding down the shift key. Further, to create a loop, select a node and press the 'r' key.
+	      When an edge is selected, you may press the 'l', 'r', and 'b' keys to change the edge to a left-, right-, or two-sided edge, respectively.", 
 	      BR{}, BR{}}, 
- 	      
 	      
 	 {BOLD "Hide Labels: ", "Removes the labels from the vertices.", BR{}, BR{}},  	      
 	 
 	 {BOLD "Highlight Neighbors: ", "Allows you to see the neighbors of a vertex when selected.", BR{}, BR{}}, 
 	 
 	 {BOLD "Reset Nodes: ", "When you move a vertex, it will pin it to the canvas. If you have pinned a node to the canvas, you can 
-	     undo this process by reseting the nodes. Clicking this will reset all nodes.", BR{}, BR{}}, 
+	     undo this process by resetting the nodes. Clicking this will reset all nodes.", BR{}, BR{}}, 
 	     
 	 {BOLD "Turn off force: ", "The force is what creates the charges on the nodes. Turning this off will make the vertices 
 	     not repel each other.", BR{}, BR{}}, 
@@ -1452,7 +1434,7 @@ document {
 	     being viewed. You will then have to copy this to the clipboard by clicking a new button. The TeX file will only need 
 	     '\\usepackage{tikz}' in the preamble. If you decide you want to modify the digraph, feel free. All you need do in 
 	     order to get a new TikZ code is click on 'Generate TikZ code' once more, and then click the button. This button will look
-	     the same, but it will be a new code. At this time loops, or reflexive edges, are not represented in the TikZ image", BR{}, BR{}}, 
+	     the same, but it will be a new code.", BR{}, BR{}}, 
 	     
 	 {BOLD "Boolean tests: ", "Clicking this will pull up a submenu of boolean tests supported by the ", TO "Graphs", " package. 
 	     Clicking on these tests will send a request to Macaulay2 to calculate the answer for the current digraph on the screen. ",
@@ -1469,7 +1451,7 @@ document {
 
 	 },
 	
-
+    Caveat => {"When the digraph is exported back to Macaulay2 after ending the visualization session, all vertices are represented as strings.  To recover the values of these labels (for example, if they have numeric values or represent ring variables), use the command ", TT "value first toString G", "."},
      
     SeeAlso => {
 	 "Basic Workflow for Visualize",
@@ -1507,10 +1489,10 @@ document {
      PARA {"At this point we wish to visualize ", TT "P", ". To do this simply execute ", TT "H = visualize P", " and 
      browser will open with interactive image. You can view this image in the link below."},
      
-     PARA {HREF(replace("PKG","Visualize",currentLayout#"package")|"poset-example.html","Visualize Posets example")},
+     PARA {HREF(reldir|"poset-example.html","Visualize Posets example")},
      
      -- make sure this image matches the graph in the example. 
---     PARA IMG ("src" => replace("PKG","Visualize",currentLayout#"package")|"images/Visualize/Visualize_Graph1.png", "alt" => "Original graph entered into M2"), 
+--     PARA IMG ("src" => reldir|"images/Visualize/Visualize_Graph1.png", "alt" => "Original graph entered into M2"), 
      
      
      PARA {"Once finished with a session, you can keep visualizing. For example if you were to say ", TT "H = visualize P", ", once you 
@@ -1530,9 +1512,13 @@ document {
 	     increases and decreases the length of the edges.", BR{}, BR{}}, 
 	     
 	 {BOLD "Enable Editing: ", "In the browser, you can edit the poset (add/delete vertices or edges) by clicking ", TT "Enable Editing",
-	      ".  For example, in order to remove the edges ", TT "{0,1}", " and ", TT "{1,3}", " click on 'Enable Editing' and select 
-	      the edges and press delete on the keyboard. You may also add vertices and edges with the mouse/trackpad. When editing is enabled,
-	      you can move the vertices around by holding down the shift key. Further, to create a loop, select a node and press the 'r' key.", 
+	      ".  For example, in order to remove the edge ", TT "{1,2}" , ", click on 'Enable Editing' and select 
+	      the edge and press delete on the keyboard.  When deleting an edge, the minimal covering relations and visual display are automatically
+	      updated to reflect the new poset structure.  You may also add vertices and edges with the mouse/trackpad. When adding a new edge
+	      (relation), you must drag from the smaller vertex in the relation to the larger vertex.  Each time a new edge is added, a check is
+	      performed to determine whether the new edge would violate antisymmetry, and if so then an alert is displayed.  Also, each time a new
+	      edge is added, the transitive closure is computed, the rank/height of each poset element is recomputed, and the visual display of the
+	      poset is updated.  When editing is enabled, you can move the vertices around by holding down the shift key.  ", 
 	      BR{}, BR{}}, 
 	      
 	 {BOLD "Hide Labels: ", "Removes the labels from the vertices.", BR{}, BR{}},  	      
@@ -1542,7 +1528,7 @@ document {
 	 {BOLD "Fix extremal nodes: ", "Forces extremal nodes to be placed at the top and bottom of the image.", BR{}, BR{}}, 	 
 	 
 	 {BOLD "Reset Nodes: ", "When you move a vertex, it will pin it to the canvas. If you have pinned a node to the canvas, you can 
-	     undo this process by reseting the nodes. Clicking this will reset all nodes.", BR{}, BR{}}, 
+	     undo this process by resetting the nodes. Clicking this will reset all nodes.", BR{}, BR{}}, 
 	     
 	 {BOLD "Turn off force: ", "The force is what creates the charges on the nodes. Turning this off will make the vertices 
 	     not repel each other.", BR{}, BR{}}, 
@@ -1568,9 +1554,8 @@ document {
 
 	 },
 	
+    Caveat => {"When the poset is exported back to Macaulay2 after ending the visualization session, all vertices are represented as strings.  To recover the values of these labels (for example, if they have numeric values or represent ring variables), use the command ", TT "poset(value toString vertices P,value toString coveringRelations P)", "."},
 
-     
-     
     SeeAlso => {
 	 "Basic Workflow for Visualize",
 	 (visualize,Graph),	 
@@ -1606,10 +1591,10 @@ document {
      PARA {"At this point we wish to visualize ", TT "D", ". To do this simply execute ", TT "H = visualize D", " and 
      browser will open with interactive image. You can view this image in the link below."},
      
-     PARA {HREF(replace("PKG","Visualize",currentLayout#"package")|"simplicial-complex-example.html","Visualize Simplicial Complex example")},
+     PARA {HREF(reldir|"simplicial-complex-example.html","Visualize Simplicial Complex example")},
      
      -- make sure this image matches the graph in the example. 
---     PARA IMG ("src" => replace("PKG","Visualize",currentLayout#"package")|"images/Visualize/Visualize_Graph1.png", "alt" => "Original graph entered into M2"), 
+--     PARA IMG ("src" => reldir|"images/Visualize/Visualize_Graph1.png", "alt" => "Original graph entered into M2"), 
      
      
      PARA {"Once finished with a session, you can keep visualizing. For example if you were to say ", TT "H = visualize D", ", once you 
@@ -1632,7 +1617,7 @@ document {
 	      ".  For example, in order to remove the edges ", TT "{0,1}", " and ", TT "{1,3}", " click on 'Enable Editing' and select 
 	      the edges and press delete on the keyboard. You may also add vertices and edges with the mouse/trackpad. When editing is enabled,
 	      you can move the vertices around by holding down the shift key. Further, to create a face, hold down the 'f' key and select 
-	      three nodes.", 
+	      three distinct nodes.", 
 	      BR{}, BR{}}, 
 	      
 	 {BOLD "Hide Labels: ", "Removes the labels from the vertices.", BR{}, BR{}},  	      
@@ -1640,7 +1625,7 @@ document {
 	 {BOLD "Highlight faces: ", "Allows you to see the connecting faces when a vertex is selected.", BR{}, BR{}}, 
 	 
 	 {BOLD "Reset Nodes: ", "When you move a vertex, it will pin it to the canvas. If you have pinned a node to the canvas, you can 
-	     undo this process by reseting the nodes. Clicking this will reset all nodes.", BR{}, BR{}}, 
+	     undo this process by resetting the nodes. Clicking this will reset all nodes.", BR{}, BR{}}, 
 	     
 	 {BOLD "Turn off force: ", "The force is what creates the charges on the nodes. Turning this off will make the vertices 
 	     not repel each other.", BR{}, BR{}}, 
@@ -1739,8 +1724,8 @@ document {
      Key => {FixExtremeElements,[(visualize,Poset),FixExtremeElements]},
      Headline => "an option to fix extreme elements of a poset",
      
-     PARA "When using this option, the visualized poset will be drawn such that the extreme elements are place 
-     in the top and bottom of the drawing.",
+     PARA "When using this option, the visualized poset will be drawn such that the extreme elements are placed 
+     at the top and bottom of the drawing.",
      
     SeeAlso => {
 	 "Basic Workflow for Visualize",
@@ -1748,22 +1733,6 @@ document {
 	}
      
      }
-
-
--*
-document {
-     Key => [(visualize,Poset),FixExtremeElements],
-     Headline => "an option that brett created",
-     
-     PARA "I don't know what this is.",
-     
-    SeeAlso => {
-	"Basic Workflow for Visualize",
-	"Visualizing Posets"
-	}
-     
-     }
- *-
 
 document {
      Key => [(visualize,Digraph),VisPath],
@@ -2237,7 +2206,7 @@ end
 restart
 uninstallPackage"Visualize"
 restart
-path = {"~/GitHub/M2/M2/Macaulay2/packages/"}|path
+path = {"~/GitHub/Visualize-M2/"}|path
 installPackage"Visualize"
 viewHelp Visualize
 viewHelp doc
@@ -2252,17 +2221,40 @@ viewHelp doc
 
 -- Graphs
 restart
-loadPackage "Graphs"
+path = {"~/GitHub/Visualize-M2/"}|path
+loadPackage"Graphs"
 loadPackage"Visualize"
+openPort"8080"
 G = graph({{x_0,x_1},{x_0,x_3},{x_0,x_4},{x_1,x_3},{x_2,x_3}},Singletons => {x_5})
 visualize G
 G2 = cocktailParty 10
 visualize G2
 
+G = graph({},Singletons => {x_1,x_2})
+visualize G
+
 G1 = barbellGraph 6
 visualize G1
 G3 = barycenter completeGraph 6
 visualize G3
+
+-- Converting graphs with String vertices back to their values.
+R = QQ[x]
+V = {"1","0100","1/2","a","x"}
+
+G = graph({{V#0,V#1},{V#1,V#0},{V#0,V#2},{V#1,V#3}},Singletons => {V#4})
+G2 = value first toString G
+
+D = digraph({{V#0,{V#0,V#1}},{V#1,{V#2,V#3}},{V#2,{V#3,V#4,V#2}}})
+class last vertices D
+D2 = value first toString D
+class last vertices D2
+
+P = poset({{V#0,V#1},{V#0,V#2},{V#0,V#3},{V#4,V#2},{V#2,V#3}})
+apply(vertices P, i -> class i)
+P2 = poset(value toString vertices P,value toString coveringRelations P)
+apply(vertices P2, i -> class i)
+areIsomorphic(P,P2)
 
 -- Digraphs
 restart
@@ -2277,10 +2269,46 @@ visualize D1
 D2 = digraph {{1,{2,3}}, {2,{4,5}}, {3,{5,6}}, {4,{7}}, {5,{7}},{6,{7}},{7,{}}}
 visualize D2
 
+D = digraph({})
+visualize D
+
+-- Posets
+restart
+loadPackage"Posets"
+loadPackage"Visualize"
+openPort"8080"
+P = divisorPoset(258)
+P = divisorPoset(2)
+visualize P
+
+P = poset({1,2,3,4,5},{{1,2},{1,3},{2,4},{3,5},{4,5}})
+visualize P
+
+-- The following poset demonstrates a bug in the rankFunction method of the Posets package.
+-- Vertex 4 covers vertex 1, but they are assigned the same rank by rankFunction.  In fact the poset is not ranked.
+P = poset({0,1,2,3,4},{{0,2},{2,3},{1,4},{0,4},{1,3}})
+isRanked P
+vertices P
+rankFunction P -- Notice that 1 and 4 both have rank 1.
+coveringRelations P -- But 4 covers 1.
+visualize P
+
+-- Simplicial Complexes
+restart
+loadPackage"SimplicialComplexes"
+loadPackage"Visualize"
+openPort"8080"
+R=ZZ[x_0..x_5]
+C = simplicialComplex apply({{x_0, x_1, x_2}, {x_1, x_2, x_3}, {x_0, x_1, x_4}, {x_0, x_3, x_4}, {x_2, x_3, x_4}, {x_0, x_2, x_5}, {x_0, x_3, x_5}, {x_1, x_3, x_5}, {x_1, x_4, x_5}, {x_2, x_4, x_5}},face)
+visualize C
+
+R = ZZ[a..f]
+visualize simplicialComplex monomialIdeal(a*f, b*d, c*e)
+
 -- tom examples
 -- Posets
 restart
-path = path|{"~/GitHub/Visualize-M2/"}
+path = {"~/GitHub/Visualize-M2/"}|path
 loadPackage "Visualize"
 openPort "8081"
 --P = poset {{abc,2}, {1,3}, {3,4}, {2,5}, {4,5}}
@@ -2292,6 +2320,9 @@ visualize(oo, Verbose=>true)
 
 closePort()
 -- ideals
+restart
+path = {"~/GitHub/Visualize-M2/"}|path
+loadPackage "Visualize"
 R=ZZ/101[x,y]
 I=ideal(x^5,x^2*y,y^4)
 visualize I
@@ -2402,7 +2433,7 @@ I = ideal"x4,xy3,y5"
 visualize I
 visualize( I, VisPath => "/Users/bstone/Desktop/Test/", Warning => false)
 visualize( I, VisPath => "/Users/bstone/Desktop/Test/")
-
+y
 closePort()
 
 
@@ -2462,9 +2493,9 @@ visIdeal( I, VisPath => "/Users/bstone/Desktop/Test/")
 
 S = QQ[x,y]
 I = ideal"x4,xy3,y5"
-visIdeal I
-visIdeal( I, VisPath => "/Users/bstone/Desktop/Test/")
-
+visualize I
+visualize( I, VisPath => "/Users/bstone/Desktop/Test/")
+y
 
 copyJS "/Users/bstone/Desktop/Test/"
 yes
@@ -2515,7 +2546,7 @@ uninstallPackage"Graphs"
 path = path|{"~/GitHub/Visualize-M2/"}
 path = {"~/GitHub/M2/M2/Macaulay2/packages/"}|path
 
-loadPackage "Visualize"
+needsPackage "Visualize"
 openPort "8080"
 closePort()
 -- Graphs
@@ -2523,7 +2554,8 @@ G = graph({{0,1},{0,3},{0,4},{1,3},{2,3}},Singletons => {5})
 isRigid G
 
 visualize( G, Verbose => true )
-visualize(G, VisPath => "/Users/bstone/Desktop/Test/", Warning => false)
+visualize(G, VisPath => "/Users/bstone/Desktop/Test/", Warning => true)
+y
 
 cycleGraph 9
 visualize oo
@@ -2554,7 +2586,7 @@ visualize (D2, VisPath => "/Users/bstone/Desktop/Test/", Warning => false)
 
 -- Posets
 restart
-path = path|{"~/GitHub/Visualize-M2/"}
+path = {"~/GitHub/Visualize-M2/"}|path
 loadPackage "Visualize"
 openPort "8081"
 P2 = poset {{1,2},{2,3},{3,4},{5,6},{6,7},{3,6}}
@@ -2565,22 +2597,24 @@ visualize oo
 -- Simplicial Complexes
 R = ZZ[a..f]
 D = simplicialComplex monomialIdeal(a*b*c,a*b*f,a*c*e,a*d*e,a*d*f,b*c*d,b*d*e,b*e*f,c*d*f,c*e*f)
-visualize D
+visualize G
 
 R = ZZ[a..g]
 D2 = simplicialComplex {a*b*c,a*b*d,a*e*f,a*g}
 visualize( D2, VisPath => "/Users/bstone/Desktop/Test/", Warning => false)
 
 R = ZZ[a..f]
-L =simplicialComplex {d*e*f, b*e*f, c*d*f, b*c*f, a*d*e, a*b*e, a*c*d, a*b*c}
+L =simplipcialComplex {d*e*f, b*e*f, c*d*f, b*c*f, a*d*e, a*b*e, a*c*d, a*b*c}
 visualize L
 
 
 -- Ideals
-S = ZZ/101[x,y]
+S = QQ[x,y]
 I = ideal"x4,xy3,y5"
-I = ideal"x4,xy3,y5+y"
+visualize I
 visualize( I, VisPath => "/Users/bstone/Desktop/Test/", Warning => false)
+
+viewHelp EdgeIdeals
 
 R = QQ[x,y,z]
 J = ideal"x4,xyz3,yz2,xz3,z6,y5"
@@ -2600,4 +2634,118 @@ restart
 path ={"~/GitHub/Visualize-M2/"}|path
 installPackage"Visualize"
 viewHelp Visualize
-needsPackage"Visualize"
+
+///
+restart
+makeVisualizeFun = method()
+makeVisualizeFun(Function) := g -> (
+    return g a == b;
+    )
+a = "Hello"; b=a;
+
+f := s -> s
+userFunction f
+
+m = method()
+m(ZZ) := z -> z+1
+userFunction m    
+
+restart
+path = {"~/GitHub/Visualize-M2/"}|path
+loadPackage"Visualize"
+///
+
+
+
+
+
+
+
+-- Demo For the paper
+
+restart
+-- Workflow
+loadPackage "Visualize"
+openPort "8080"
+openPort "8081"
+closePort()
+openPort "8081"
+
+-- Case Study: Graphs
+restart
+
+needsPackage"Graphs"
+G = graph({{1,2},{1,3},{2,3},{3,4}},Singletons=>{5})
+
+loadPackage "Visualize"
+openPort "8080"
+visualize G
+
+
+testvisualize = method(Options => true)
+testvisualize(ZZ) := {VisPath => defaultPath, Warning => true, Verbose => false}|{VisTemplate => "basePath" | "Visualize/templates/visGraph/visGraph-template.html"} >> opts -> G -> (
+    return G;
+    )
+testvisualize 5
+
+-- fpsac paper
+
+restart
+
+path = path|{"~/GitHub/Visualize-M2/"}
+
+needsPackage "Visualize"
+openPort "8080"
+openPort "8081"
+
+P = partitionLattice 3
+visualize P
+
+H = hasseDiagram P
+visualize H
+
+H = K
+
+G = vertices H
+R = edges H
+
+Q = poset(G,R, AntisymmetryStrategy => "digraph") -- Correct poset, but ground set has changed. 
+visualize Q
+
+closePort()
+
+-- Examples for the M2 documentation --
+restart
+path = {"~/GitHub/Visualize-M2/"}|path
+loadPackage"Graphs"
+loadPackage"Visualize"
+openPort"8080"
+ExamplePath = "~/Desktop/vis_examples/"
+
+-- Graph example
+G = graph({{0,1},{0,3},{0,4},{1,3},{2,3}},Singletons => {5})
+visualize(G)
+
+-- Digraph example
+D = digraph {{1,{2,3}}, {2,{4,5}}, {3,{5,6}}, {4,{7}}, {5,{7}},{6,{7}},{7,{}}}
+visualize(D)
+
+-- Poset example
+P = poset {{1,2},{2,3},{3,4},{5,6},{6,7},{3,6}}
+visualize(P)
+
+-- Simplicial complex example
+R = ZZ[a..g]
+D = simplicialComplex {a*b*c,a*b*d,a*e*f,a*g}
+visualize(D)
+
+-- Monomial ideal staircase diagram 2d example
+S = QQ[x,y]
+I = ideal"x4,xy3,y5"
+visualize(I)
+
+
+-- Monomial ideal staircase diagram 3d example
+R = QQ[x,y,z]
+J = ideal"x4,xyz3,yz2,xz3,z6,y5"
+visualize(J)

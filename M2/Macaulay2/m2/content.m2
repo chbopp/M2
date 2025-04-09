@@ -1,3 +1,5 @@
+needs "set.m2"
+
 protect qname 						    -- an internal key
 
 -- from xhtml-math11-f.dtd:
@@ -175,6 +177,9 @@ validContent#"code" =
 validContent#"em" =
 -- <!ENTITY % tt.content "( #PCDATA | %Inline.mix; )*" >
 validContent#"tt" = 
+validContent#"kbd" =
+validContent#"samp" =
+validContent#"var" =
 -- <!ENTITY % i.content "( #PCDATA | %Inline.mix; )*" >
 validContent#"i" = 
 -- <!ENTITY % b.content "( #PCDATA | %Inline.mix; )*" >
@@ -201,6 +206,7 @@ validContent#"pre" = PCDATA + Inlstruct + Inlphras + set { "tt", "i", "b" } + I1
 validContent#"head" = set {"title", "base", "script", "style", "meta", "link" }
 -----------------------------------------------------------------------------
 -- <!ENTITY % td.content "( #PCDATA | %Flow.mix; )*" >
+validContent#"th" =
 validContent#"td" = PCDATA + FlowMix
 -- <!ENTITY % tr.content  "( %th.qname; | %td.qname; )+" >
 validContent#"tr" = set { "th", "td" }
@@ -214,12 +220,17 @@ validContent#"title" = PCDATA
 
 -- <!ENTITY % ul.content  "( %li.qname; )+" >
 validContent#"ul" = set { "li" }
+-- <!ENTITY % ol.content  "( %li.qname; )+" >
+validContent#"ol" = set { "li" }
 
 validContent#"comment" = PCDATA
 validContent#"cdata" = PCDATA
 
 -- <!ENTITY % style.content  "( #PCDATA )" >
 validContent#"style" = PCDATA
+
+-- <!ENTITY % script.content  "( #PCDATA )" >
+validContent#"script" = PCDATA
 
 -- Local Variables:
 -- compile-command: "make -C $M2BUILDDIR/Macaulay2/m2 "

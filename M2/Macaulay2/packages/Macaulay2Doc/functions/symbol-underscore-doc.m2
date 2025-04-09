@@ -2,18 +2,19 @@ undocumented {
      (symbol _, ZZ, EngineRing),
      (symbol _, EngineRing, ZZ),
      (symbol _, RR, EngineRing),
+     (symbol _, RRi, EngineRing),
      (symbol _, ZZ, Monoid),
      (symbol _, Monoid, ZZ),
-     (symbol _, Symbol, GeneralOrderedMonoid),
-     (symbol _, IndexedVariable, GeneralOrderedMonoid),
      (symbol _, Vector, ZZ),
      (symbol _, Monoid, List),
-     (symbol _, QuotientRing, String),
-     (symbol _, MonoidElement, GeneralOrderedMonoid),
+     (symbol _, Symbol, Monoid),
+     (symbol _, IndexedVariable, Monoid),
+     (symbol _, MonoidElement, Monoid),
+     (symbol _, String, Monoid),
      (symbol _, RingElement, MonoidElement),
      (symbol _, PolynomialRing, List),
      (symbol _, RingElement, RingElement), --coeff of monomials in polynomial -- deprecate or obsolete
-     (symbol _, Holder, Holder),
+     (symbol _, Ring, String), -- these three are kept for backwards compatibility
      (symbol _, Ring, Symbol), -- maybe should be deprecated?
      (symbol _, Ring, IndexedVariable) -- this should be deprecated?
      }
@@ -66,7 +67,7 @@ document {
      PARA{},
      "Remark: any subscripts that are sequences will have their elements spliced into the rest of the list.",
      EXAMPLE "{a,b,c,d,e}_{2..4}",
-     SeeAlso => {"ranges and repetitions", (symbol _, VisibleList, ZZ)}
+     SeeAlso => {"lists and sequences", (symbol _, VisibleList, ZZ)}
      }
 
 document { 
@@ -161,12 +162,12 @@ document {
 	  S_2
 	  S_6
 	  ///,
-     SeeAlso => {generators, (symbol _, Ring, String)}
+     SeeAlso => {generators, (symbol _, String, Ring)}
      }
 document { 
-     Key => (symbol _, Ring, String), -- ring variable by name
+     Key => (symbol _, String, Ring), -- ring variable by name
      Headline => "get a ring variable by name",
-     Usage => ///R_"x"///,
+     Usage => ///"x"_R///,
      Inputs => {
 	  "R",
 	  Nothing => {TT ///"x"///, ", ", ofClass String}
@@ -184,7 +185,7 @@ document {
      There are several ways of now referring to ", TT "x", " in the ring ", TT "R", ".",
      EXAMPLE lines ///
 	  R_0
-	  R_"x"
+	  "x"_R
 	  use R;
 	  x
 	  ///,
@@ -211,11 +212,12 @@ document {
      There are various ways of now referring to ", TT "x", " in the ring ", TT "R", ".",
      EXAMPLE lines ///
 	  R_0
-	  R_"x"
+	  symbol x
+	  oo_R
 	  use R;
 	  x
 	  ///,
-     SeeAlso => {(symbol _, Ring, ZZ), (symbol _, Ring, String), (use,Ring)}
+     SeeAlso => {(symbol _, Ring, ZZ), (symbol _, String, Ring), (use,Ring)}
      }
 document { 
      Key => (symbol _, Ring, List),           -- make monomial
@@ -255,7 +257,7 @@ document {
      symbol t_1
      oo_R
      ///,
-     SeeAlso => {(symbol _, Ring , ZZ), (symbol _, Ring, String)}
+     SeeAlso => {(symbol _, Ring , ZZ), (symbol _, String, Ring)}
      }
 document { 
      Key => {
@@ -315,7 +317,6 @@ document {
 document { 
      Key => {"generators of ideals and modules",
 	  (symbol _, Ideal, ZZ),
-	  (symbol _, MonomialIdeal, ZZ),
 	  (symbol _, Module, ZZ),
 	  (symbol _, Matrix, ZZ)},
      Headline => "",
@@ -323,7 +324,7 @@ document {
 	  Heading => "Synopsis",
      	  Usage => "L_i",
      	  Inputs => {
-	       "L" => ofClass{Ideal,MonomialIdeal,Module,Matrix},
+	       "L" => ofClass{Ideal,Module,Matrix},
 	       "i" => ZZ
 	       },
      	  Outputs => {

@@ -1,11 +1,12 @@
 newPackage(
 "MCMApproximations",
 Version => "1.1",
-Date => "April 3, 2013, revised June 15, 2017",
+Date => "April 3, 2013, revised August 21, 2017",
 Authors => {{Name => "David Eisenbud",
 Email => "de@msri.org",
 HomePage => "http://www.msri.org/~de"}},
-Headline => "MCM Approximations and Complete Intersections",
+Headline => "MCM approximations and complete intersections",
+Keywords => {"Commutative Algebra"},
 DebuggingMode => false
 )
 
@@ -77,7 +78,7 @@ profondeur(Ideal, Module) := (I,M) ->(
 
 profondeur Module := M  ->(
     --profondeur of a module with respect to the max ideal, via finite proj dim
-    --gives error if the ultimate coeficient ring of R = ring M is not a field.
+    --gives error if the ultimate coefficient ring of R = ring M is not a field.
     R := ring M;
     if not isCommutative R then error"profondeur undefined for noncommutative rings";
     (S,F) := flattenRing R;
@@ -94,25 +95,28 @@ profondeur Ring := R -> profondeur R^1
 approximatione = method(Options =>{CoDepth => -1})
 approximatione(ZZ,Module) := opts -> (n,M) ->(
     --returns the map to M from the
-    --dual of the n-th syz of the n-th syzy of M
-    --n = dim ring M - depth M +1 -- this just slows things down!
-    --if n' were 1 or 2 we would not in general get minimal presentations
+    --dual of the n-th syz of the n-th syzy of Mp = prune M
+    --if n' were 1 or 2 then, without introducing Mp 
+    --the source M' of the map returned might not be homogeneous.
     if n == 0 then n = 1;
-    F := res(M, LengthLimit =>n);
-    if F.dd_n==0 then return map(M,(ring M)^0,0);
+    Mp := prune M;
+    p := Mp.cache.pruningMap; -- the iso Mp -->M
+    if isFreeModule Mp then return p;
+    F := res(Mp, LengthLimit =>n);
+    if F.dd_n == 0 then return map(M,(ring M)^0,0); -- in this case the n-th syz is 0
     G := res(coker transpose F.dd_n, LengthLimit =>n);
     F' := chainComplex reverse apply(n, j-> transpose F.dd_(j+1));
     phi := extend(G, F', id_(G_0));
-    M' := prune coker transpose G.dd_n;
-      map(M, M', transpose (matrix(M'.cache.pruningMap)^(-1) * phi_n))  
-)
+    M' := coker transpose G.dd_n;
+    map(M, M',(matrix p)*transpose phi_n)
+    )
 
 approximatione Module := opts -> M ->(
     --returns the map from the essential MCM approximation
-    n := 1+dim ring M;
+    n := max(3,1+dim ring M); -- if n were 1 or 2 we might get nonminimal presentations
     if opts.CoDepth == 0 then n = 1;
     if opts.CoDepth > 0 then n = opts.CoDepth;
-    approximatione(n, M)
+    approximatione(n, M)-- correctly gives 0 if M has finite pd (necessarily < 1+dim ring M)
     )
 
 coSyzygyChain = method()
@@ -212,7 +216,7 @@ setupModules = method()
 setupModules(List,Module) := (R,M)->(
     --R_i is a ci of codim i in a ring S
     --returns (MM,kk,p) where
-    --MM,kk are lists whose i-compoents are the module M and residue field k, but over R_i
+    --MM,kk are lists whose i-components are the module M and residue field k, but over R_i
     --p_i_j is the projection from R_j to R_i (c >= i >= j >= 0)
     --M is a a module over R_c.
     c := length R-1;
@@ -232,7 +236,7 @@ Headline
   Maximal Cohen-Macaulay Approximations and Complete Intersections
 Description
   Text
-   Maximal Cohen-Macaulay approximatiodns were introduced by Auslander and Buchweitz
+   Maximal Cohen-Macaulay approximations were introduced by Auslander and Buchweitz
    [The homological theory of maximal Cohen-Macaulay (MCM) approximations, 
    Colloque en l'honneur de Pierre Samuel (Orsay, 1987)
    Soc. Math. France (N.S.)} No. {\bf 38}, (1989), 5 - 37.] 
@@ -273,7 +277,7 @@ Description
    gives the coapproximation sequence
    0\to M \to N''\to M'' \to 0.
    
-   The routine coApproximation M resurns the map M --> N''.
+   The routine coApproximation M returns the map M --> N''.
    Here is an example of a simple approximation sequence, 
    exhibited by the betti tables of its 3 middle terms:
    
@@ -293,7 +297,7 @@ Description
    netList apply({1,2,3}, i-> betti res Ea_i)
   Text
    Here is a similar display for the co-approximation sequence. Here
-   the Betti table of M is at the bottom, the Betti table of the module of finite projecdtive dimension
+   the Betti table of M is at the bottom, the Betti table of the module of finite projective dimension
    is in the middle, and that of the MCM module is at the top (
   Example
    Ec = coApproximationSequence M;
@@ -364,7 +368,7 @@ doc ///
      If k==0 then the N=M. If k>0 then the syzygy module is computed from the 
      resolution. If k<0 then the program returns the dual of the (n-k)-th syzygy
      of the dual of the k-th syzygy, where n is one more than Codepth if that
-     opition is specified, and else n is the number of variables of ring M. 
+     option is specified, and else n is the number of variables of ring M. 
      Of course the resulting N is 0 if ring M is regular, and otherwise correct
      only if ring M is Gorenstein. In the Gorenstein case, syzygyModule(-k, syzygyModule(k, M))
      -is the non-free part of the source of the MCM approximation of M.
@@ -638,7 +642,7 @@ doc ///
      with no free summands then the Auslander invariant is 0.
      
      Ding showed that if R is a hypersurface ring, then
-     auslanderInvariant (R^1)/((ideal vars R)^i) is zero precisely for i<multiplicty R.
+     auslanderInvariant (R^1)/((ideal vars R)^i) is zero precisely for i<multiplicity R.
      
      Experimentally, it looks as if for a complete intersection the power is the 
      a-invariant plus 1, but NOT for the codim 3 Pfaffian example.
@@ -705,7 +709,7 @@ doc ///
     c:ZZ
      desired codimension
     d:ZZ
-     degree of homogoneous generators
+     degree of homogeneous generators
     ff:Matrix
      a regular sequence
    Outputs
@@ -725,7 +729,7 @@ doc ///
 ///
     --R_i is a ci of codim i in a ring S
     --returns (MM,kk,p) where
-    --MM,kk are lists whose i-compoents are the module M and residue field k, but over R_i
+    --MM,kk are lists whose i-components are the module M and residue field k, but over R_i
     --p_i_j is the projection from R_j to R_i (c >= i >= j >= 0)
 
 doc ///
@@ -871,9 +875,10 @@ use S
 R' = S/ideal"a3,b3"
 M = coker vars R
 (phi,psi) = approximation(pushForward(map(R,R'),ker syz presentation M))
-assert( (prune source phi) === cokernel map((R')^{{-4},{-4},{-4},{-4},{-4},{-4},{-3}},(R')^{{-5},{-5},{-5},{-5},{-5},{-5},{-6},{-6},{-6}},
-	      {{c,-b, 0, 0, 0, 0, a^2, 0, 0}, {0, 0, b, 0, -c, 0, 0, a^2, 0}, {a, 0, 0, 0, 0, -b, 0, 0, 0}, 
-		  {0, a, 0, 0,0, -c, 0, -b^2, 0}, {0, 0, a, c, 0, 0, 0, 0, b^2}, {0, 0, 0, b, a, 0, 0, 0, 0}, {0, 0, 0, 0, b^2, a^2, 0, 0, 0}}) )
+
+assert(presentation source phi == map(R'^{6:-4,-3},,matrix {{0, 0, -b^2, 0, 0, 0, -c, 0, a}, {0, a^2, 0, -c, 0, 0, 0, 0, -b}, {0, 0, a^2, 0, -c, 0, 0, -b, 0}, 
+	{0, 0, 0, a, 0, 0, b, 0, 0}, {0, 0, 0, 0, -a, b, 0, 0, 0}, {-b^2, 0, 0, 0, 0, c, 0, a, 0}, {0, 0, 0, 0, b^2, 0, a^2, 0, 0}}
+))
 assert( (prune source psi) === (R')^{{-4},{-4},{-4}} )
 assert(isSurjective(phi|psi)===true)
 assert( (prune ker (phi|psi)) === (R')^{{-5},{-5},{-5},{-6},{-6},{-6}} );
@@ -888,23 +893,17 @@ cod = numcols ff
 I = ideal ff
 R = S/I
 q = map(R,S)
-M = coker vars R
-M0 = coker vars R
-M0= coker random(R^2, R^{4:-1})
-M = pushForward(q,syzygyModule(3,M0))
-layeredResolution(ff,pushForward(q,M0))
-scan(2, s->(
-M= pushForward(q,syzygyModule(s+3,M0));
-L = (layeredResolution(ff, M))_0;
-assert (betti L == betti res M);
-))
+M0= coker random(R^2, R^{4:-1});
+M = pushForward(q,syzygyModule(4,M0));
+L = (layeredResolution(ff,M))_0;
+assert(betti L == betti res M)
 ///
 
 TEST///
 S = ZZ/101[a,b,c]/ideal(a^3)
-M = module(ideal(a,b,c))
-Ea = approximationSequence M
-Ec = coApproximationSequence M
+M = module(ideal(a,b,c));
+Ea = approximationSequence M;
+Ec = coApproximationSequence M;
 assert(isFreeModule prune Ea_3 ===true)
 assert(length res prune Ec_2 == 1)
 ///
@@ -924,3 +923,5 @@ uninstallPackage "CompleteIntersectionResolutions"
 restart
 installPackage "CompleteIntersectionResolutions"
 check "CompleteIntersectionResolutions"
+
+approximation(MR')

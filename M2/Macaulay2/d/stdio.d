@@ -6,7 +6,9 @@ use gmp;
 use expr;
 use stdio0;
 
-header "#include \"../system/m2fileinterface.h\"";
+header "#include \"../system/m2fileinterface.h\"
+	#include <assert.h>";
+
 --provide a constant representation of default buffer size for a file
 --this must be set the same as the bufsize in stdio0.d
 bufsize ::= 4 * 1024;
@@ -47,21 +49,21 @@ export newFile(
 	outbuffer:string,	-- buffer
 	                        -- outbuffer . 0 is the first char in the buffer
 	outindex:int,	        -- outbuffer.(outindex-1) is the last char
-	outbol:int,	        -- outbuffer.outbol = first char of the current line
+	outbol:int,	        -- outbuffer.outbol is the index of the first char of the current line
 	     	       	        -- The text after this point may be combined with
 				-- subsequently printed nets.
         hadNet:bool,		-- whether a Net is present, in which case the
-	     	       	        -- buffer will be empty
+				-- buffer will be empty (actually just outbol == outindex)
 	nets:NetList,	        -- list of nets, to be printed after the outbuffer
         bytesWritten:int,       -- bytes written so far
 	lastCharOut:int,        -- when outbuffer empty, last character written, or -1 if none
         readline:bool,          -- input handled by readline()
-	fileThreadState:int     -- state of thread handling 
+	fileThreadMode:int      -- mode of thread sync handling
 ):file := ( 
-foss := newFileOutputSyncState(outbuffer,outindex,outbol,hadNet,nets,bytesWritten,lastCharOut);
+foss := newFileOutputSyncState(outbuffer,outindex,outbol,hadNet,nets,bytesWritten,lastCharOut,false);
 --foss:= newDefaultFileOutputSyncState();
 m2f := newm2cfile(foss);
-Ccode(void,"M2File_SetThreadMode(",lvalue(m2f),",",fileThreadState,")");
+Ccode(void,"M2File_SetThreadMode(",lvalue(m2f),",",fileThreadMode,")");
 file(nextHash(), filename,pid,error,errorMessage,listener,listenerfd,connection,numconns,input,infd,inisatty,inbuffer,inindex,insize,eof,
 promptq,prompt,reward,fulllines,bol,echo,echoindex,readline,output,outfd,outisatty,foss,newMutex,m2f)
 
@@ -85,10 +87,12 @@ export startFileOutput(o:file):void := (
 export endFileOutput(o:file):void := (
     Ccode(void,"M2File_EndOutput(",lvalue(o.cfile),")");
 );
-export setFileThreadState(o:file, state:int):void :=
+export setFileThreadMode(o:file, mode:int):void :=
 (
-	Ccode(void,"M2File_SetThreadMode(",lvalue(o.cfile),",state)")
+	Ccode(void,"M2File_SetThreadMode(",lvalue(o.cfile),",mode)")
 );
+export getFileThreadMode(o:file):int := (
+    Ccode(int,"M2File_GetThreadMode(", lvalue(o.cfile), ")"));
 
 export syscallErrorMessage(msg:string):string := msg + " failed: " + syserrmsg();
 export fileErrorMessage(o:file,msg:string):string := (
@@ -154,6 +158,13 @@ init():void := (
 	       stdIO.inisatty = false; 
 	       stdIO.outisatty = false;
 	       )
+	  else
+	  if arg === "--webapp" then (
+	       stdIO.echo = true; -- so echo comes from M2 (need to disable it at level of tty with stty -echo)
+	       stdIO.readline = false; -- don't go thru readline
+	       stdIO.inisatty = true; -- otherwise hangs after first syntax error
+	       stdIO.outisatty = true; -- not so important?
+	  )
 	  else
 	  if arg === "--read-only-files" then (
 	       readonlyfiles = true;
@@ -247,8 +258,8 @@ openpipe(filename:string,input:bool,output:bool):(file or errmsg) := (
      fromChild := array(int)(NOFD,NOFD);
      if output && pipe(toChild) == ERROR || input && pipe(fromChild) == ERROR 
      then (
-	  if  toChild.0 != NOFD then close(  toChild.0);
-	  if  toChild.1 != NOFD then close(  toChild.1);
+	  if  toChild.0 != NOFD then close(toChild.0);
+	  if  toChild.1 != NOFD then close(toChild.1);
 	  return errmsg("can't make pipe : "+syserrmsg());
 	  );
      arglist := tocharstarstar(array(string)("/bin/sh","-c",substr(filename,1)));
@@ -360,51 +371,56 @@ export openListener(filename:string):(file or errmsg) := (
      if length(filename) > 0 && filename . 0 == '$'
      then opensocket(filename,false,false,true)
      else (file or errmsg)(errmsg("openListener: expected file name starting with '$'")));
-export flushinput(o:file):void := (
-     o.inindex = 0;
-     o.insize = 0;
-     o.bol = true;
-     );
 
-simpleflush(o:file):int := (				    -- write the entire buffer to file or enlarge the buffer
+-----------------------------------------------------------------------------
+-- Flushing routines
+-----------------------------------------------------------------------------
+
+-- write the entire buffer to file or enlarge the buffer
+simpleflush(o:file):int := (
+     if o.outfd == NOFD then return ERROR;
+     -- TODO: lock mutex here?
      startFileOutput(o);
-     foss :=  getFileFOSS(o);
-     foss.outbol = 0;
-     if foss.outindex == 0 then ( releaseFileFOSS(o); endFileOutput(o); return 0; );
-     if o.outfd != -1 then (
-	  off := 0;
-	  n := 0;
-	  while n >= 0 && off < foss.outindex && !test(interruptedFlag) do (
-	       n = write(o.outfd,foss.outbuffer,foss.outindex-off,off);
-	       if n > 0 then (
-	       	    off = off + n;
-	       	    foss.lastCharOut = int(foss.outbuffer.(off-1));
-     	       	    foss.bytesWritten = foss.bytesWritten + n));
-	  if 0 < off then (
-	       for k from off to foss.outindex-1 do foss.outbuffer.(k-off) = foss.outbuffer.k;
-	       foss.outindex = foss.outindex - off);
-	  if n == -1 then (
-	       fileErrorMessage(o,"writing");
-	       releaseFileFOSS(o);
-               endFileOutput(o);
-	       return -1);
-	  if test(interruptedFlag) then (
-	       foss.outindex = 0;				    -- erase the output buffer after an interrupt
-	       releaseFileFOSS(o);
-               endFileOutput(o);
-	       return ERROR))
-     else if foss.outindex == length(foss.outbuffer)
-     then foss.outbuffer = enlarge(length(foss.outbuffer),foss.outbuffer);
+     foss := getFileFOSS(o);
+     --
+     if foss.capturing then (
+	  if foss.outindex == length(foss.outbuffer)
+	  then foss.outbuffer = enlarge(length(foss.outbuffer),foss.outbuffer);
+	  )
+     else (
+	foss.outbol = 0;
+	offset := 0;
+	numWritten := 0;
+	while numWritten >= 0 && offset < foss.outindex && !test(interruptedFlag) do (
+	    oldoffset := offset;
+	    numToWrite := foss.outindex - offset;
+	    Ccode(void,"assert(", numToWrite + offset <= foss.outindex, ")");
+	    numWritten = write(o.outfd,foss.outbuffer,numToWrite,offset);
+	    oldindex := foss.outindex;
+	    --
+	    Ccode(void,"assert(", oldindex == foss.outindex, ")");
+	    if test(interruptedFlag) || numWritten == ERROR then (
+		fileErrorMessage(o,"writing");
+		-- erase the output buffer after an interrupt
+		foss.outindex = 0;
+		releaseFileFOSS(o);
+		endFileOutput(o);
+		return ERROR);
+	    --
+	    offset = offset + numWritten;
+	    Ccode(void,"assert(", 0 <= offset && 0 <= foss.outindex - offset, ")");
+	    foss.lastCharOut = int(foss.outbuffer.(offset-1));
+	    foss.bytesWritten = foss.bytesWritten + numWritten);
+	-- seekp
+	for k from offset to foss.outindex-1 do foss.outbuffer.(k-offset) = foss.outbuffer.k;
+	foss.outindex = foss.outindex - offset;
+	Ccode(void,"assert(", 0 <= foss.outindex, ")");
+	  );
      releaseFileFOSS(o);
      endFileOutput(o);
-     0);
+     NOERROR);
 
--- simpleout(o:file,c:char):int := (
---      if o.outindex == length(o.outbuffer) && simpleflush(o) == ERROR then return ERROR;
---      o.outbuffer.(o.outindex) = c;
---      o.outindex = o.outindex + 1;
---      0);
-
+-- Add a string to foss.outbuffer, flushing on overflow, and updating outbol for flushnets().
 simpleout(o:file,x:string):int := (
      foss := getFileFOSS(o);
      i := 0;						    -- bytes of x transferred so far
@@ -415,6 +431,7 @@ simpleout(o:file,x:string):int := (
 	  if j == n then (
 	       if simpleflush(o) == ERROR then (releaseFileFOSS(o); return ERROR);
 	       j = foss.outindex;
+               n = length(foss.outbuffer);
 	       );
 	  b := m-i;					    -- number of bytes to transfer this time
 	  if b > n-j then b = n-j;
@@ -422,10 +439,12 @@ simpleout(o:file,x:string):int := (
 	  i = i + b;
 	  j = j + b;
 	  foss.outindex = j;
+	  foss.outbol = j;				    -- is this right?
 	  );
      releaseFileFOSS(o);
-     0);
+     NOERROR);
 
+-- Transfer any foss.nets to outbuffer, flushing on overflow.
 flushnets(o:file):int := (
      foss := getFileFOSS(o);
      if foss.hadNet then (
@@ -441,13 +460,23 @@ flushnets(o:file):int := (
 	       ); 
 	  );
      releaseFileFOSS(o);
-     0);
+     NOERROR);
 
-export flush(o:file):int := (
+export flushFile(o:file):int := (
      foss := getFileFOSS(o);
      if foss.hadNet then if ERROR == flushnets(o) then (releaseFileFOSS(o); return ERROR);
+     foss.outbol = foss.outindex;
      releaseFileFOSS(o);
      simpleflush(o));
+
+export flushinput(o:file):void := (
+    o.echoindex = o.echoindex - o.insize;
+    if o.echoindex < 0 then o.echoindex = 0;
+    o.inindex = 0;
+    o.insize = 0;
+    o.bol = true; );
+
+-----------------------------------------------------------------------------
 
 cleanUp(o:file):void := (
      if !o.listener && !o.input && !o.output then (
@@ -488,7 +517,7 @@ export closeOut(o:file):(errmsg or null) := (
      stat := 0;
      if o.outfd == NOFD then return errmsg("close: file not open");
      haderror := false;
-     haderror = haderror || flush(o) == ERROR;
+     haderror = haderror || flushFile(o) == ERROR;
      haderror = haderror || o.infd != o.outfd && close(o.outfd) == ERROR;
      haderror = haderror || o.infd == NOFD && (
 	  o.pid != 0 && (stat = wait(o.pid); o.pid = 0; 0 != stat) ||
@@ -522,24 +551,28 @@ export close(o:file):(errmsg or null) := (
 closem():void := (
      f := openfiles;
      while true do when f is null do break is fileCell:FileCell do (
-	  flush(fileCell.file);
+	  flushFile(fileCell.file);
 	  f = fileCell.next;
 	  );
      );
 
 atend(closem);
 
+-----------------------------------------------------------------------------
+-- The three main output functions
+-----------------------------------------------------------------------------
+
 export (o:file) << (n:Net) : file := (
      foss := getFileFOSS(o);
      if o.output then (
 	  if !foss.hadNet then (
-	       if foss.outindex != foss.outbol then (
-		    foss.nets = NetList(foss.nets,
-			 toNet(
-			      new string len foss.outindex - foss.outbol do
-			      for i from foss.outbol to foss.outindex - 1 do
-			      provide foss.outbuffer.i
-			      ));
+	       m := foss.outindex - foss.outbol;
+	       Ccode(void,"assert(", m >= 0, ")"); -- internal error: beginning of line marker not within buffer
+	       if m > 0 then ( 
+		    -- remove the first part of the line from the buffer and add it, as a net, to the (currently empty) list of nets
+		    s := toNet(new string len m do for i from foss.outbol to foss.outindex - 1 do provide foss.outbuffer.i);
+		    -- Ccode(void,"printf(\"adding a string of length %d starting at %d to the list of nets\\n\",", m, ",", foss.outbol, ");");
+		    foss.nets = NetList(foss.nets,s);
 		    foss.outindex = foss.outbol;
 		    );
      	       foss.hadNet = true;
@@ -553,53 +586,49 @@ export (o:file) << (c:char) : file := (
      if test(interruptedFlag) then return o;
      foss := getFileFOSS(o);
      if o.output then (
+	  -- TODO: simplify this by always printing as nets
 	  if foss.hadNet then (
-     	       foss.hadNet = true;
      	       foss.nets = NetList(foss.nets,toNet(c));
 	       )
 	  else (
-	       if foss.outindex == length(foss.outbuffer)
-	       && ERROR == flush(o) then (releaseFileFOSS(o); return o);
+	     if foss.outindex == length(foss.outbuffer) && ERROR == flushFile(o) then (releaseFileFOSS(o); return o);
 	       foss.outbuffer.(foss.outindex) = c;
 	       foss.outindex = foss.outindex + 1;
 	       );
 	  );
      releaseFileFOSS(o);
-     o
-     );
+    o);
 
 export (o:file) << (x:string) : file := (
-     foss := getFileFOSS(o);
-     if o.output then (
-	  if foss.hadNet then (
-	       o << toNet(x);
-	       )
-	  else (
-     	       foreach c in x do o << c;
-	       );
-	  );
-     releaseFileFOSS(o);
-     o );
+    foss := getFileFOSS(o);
+    if o.output then if foss.hadNet then (o << toNet(x);) else (foreach c in x do o << c;);
+    releaseFileFOSS(o);
+    o);
 
-endlfun(o:file):int := (
-     foss := getFileFOSS(o);
-     if o.output then (
-	  if foss.hadNet then if ERROR == flushnets(o) then (releaseFileFOSS(o); return ERROR);
-	  o << newline;
-	  if o.outisatty || o == stdError 
-	  then (
-	       if ERROR == simpleflush(o) then (releaseFileFOSS(o); return ERROR);
-	       )
-	  else (
-	       foss.outbol = foss.outindex;
-	       );
-	  );
-     releaseFileFOSS(o);
-     0);
+-----------------------------------------------------------------------------
+
+endlFunction(o:file):int := if o.output then (
+    foss := getFileFOSS(o);
+    if foss.hadNet then if ERROR == flushnets(o) then (releaseFileFOSS(o); return ERROR);
+    o << newline;
+    foss.outbol = foss.outindex;
+    releaseFileFOSS(o);
+    if o.outisatty || o == stdError then simpleflush(o) else NOERROR) else return ERROR;
+
+export Manipulator := {fun:function(file):int};
+export endl  := Manipulator(endlFunction);
+export flush := Manipulator(flushFile);
+
+export (o:file)      << (m:Manipulator)   : file := ( m.fun(o); o ); -- ignoring errors here
+export (o:BasicFile) << (m:Manipulator)   : int  := (
+    if m == endl  then o << basicEndl  else
+    if m == flush then o << basicFlush else ERROR);
+
+-----------------------------------------------------------------------------
 
 maybeprompt(o:file):void := (
      o.bol = false;
-     if o.promptq then stdIO << o.prompt();
+     if o.promptq then stdIO << o.prompt(); -- does this ever really happen?  Experiments show not.  Some logic might be wrong.
      );
 
 octal(c:char):string := (
@@ -644,11 +673,11 @@ export present(x:string):string := (
 	       ))
      else x);
 
-export presentn(x:string):string := ( -- fix newlines, also
+export presentn(x:string):string := ( -- fix newlines and other special chars, also
      fixesneeded := 0;
      foreach cc in x do (
 	  c := cc; 
-	  if c == char(0) || c == '\t' || c == '\b' || c == '\r' || c == '\"' || c == '\\' || c == '\n' 
+	  if c < char(32) || c == '\"' || c == '\\'
 	  then fixesneeded = fixesneeded + 1 
 	  );
      if fixesneeded != 0 then (
@@ -659,6 +688,7 @@ export presentn(x:string):string := ( -- fix newlines, also
 	       else if c == '\n' then (provide '\\'; provide 'n';)
 	       else if c == '\b' then (provide '\\'; provide 'b';)
 	       else if c == '\t' then (provide '\\'; provide 't';)
+	       else if c < char(32) then (provide '\\'; provide '?';)
 	       else (
 		    if c == '\"' || c == '\\' then provide '\\';
 	       	    provide c;
@@ -668,7 +698,7 @@ export presentn(x:string):string := ( -- fix newlines, also
 
 export filbuf(o:file):int := (
 --      if o.fulllines then (
--- 	  flush(stdIO);
+-- 	  stdIO << flush;
 -- 	  stderr << "--filbuf (fulllines, bol=" << (if o.bol then "true" else "false")
 -- 	  << ", promptq=" << (if o.promptq then "true" else "false")
 -- 	  << ", reward()=" << present(o.reward())
@@ -677,7 +707,7 @@ export filbuf(o:file):int := (
 -- 	       if o.inbuffer.i == '\n' then stderr << "\\n" else stderr << o.inbuffer.i;
 -- 	       );
 -- 	  stderr << '\n';
--- 	  flush(stderr);
+-- 	  stderr << flush;
 --      	  );
      -- returns number of bytes added to buffer, or ERROR if a system call had an error
      if ! o.input then return 0;
@@ -697,26 +727,24 @@ export filbuf(o:file):int := (
 	  n := length(o.inbuffer) - o.insize;
 	  if o.readline then (
 	       initReadlineVariables();
-	       flush(stdIO);
+	       stdIO << flush;
 	       if test(interruptedFlag) then return ERROR;
 	       startFileInput(o);
 	       r = readline(o.inbuffer,n,o.insize,o.prompt());
 	       endFileInput(o);
-	       if test(interruptedFlag) then (
-		    -- ignore interrupt flags set by our handler during calls to readline
-		    -- because readline uses interrupts for its own purposes
-		    store(interruptedFlag, false);
-		    determineExceptionFlag();
-		    );
 	       )
 	  else (
 	       if o.bol then maybeprompt(o);
-	       flush(stdIO);
+	       stdIO << flush;
 	       if test(interruptedFlag) then return ERROR;
 	       r = (
 		    if o.infd == NOFD 
 		    then 0 -- take care of "string files" made by stringTokenFile in interp.d
-		    else read(o.infd,o.inbuffer,n,o.insize)));
+		    else (
+			ret := read(o.infd,o.inbuffer,n,o.insize);
+			if ret > 0 && o == stdIO
+			then addHistory(tocharstarn(o.inbuffer, ret - 1));
+			ret)));
 	  if r == ERROR then (
 	       fileErrorMessage(o,"read");
 	       return r;
@@ -726,7 +754,7 @@ export filbuf(o:file):int := (
 	       o.bol = true;
 	       if o.promptq then (
 		    stdIO << newline;
-		    flush(stdIO);
+		    stdIO << flush;
 		    );
 	       return r;
 	       )
@@ -738,7 +766,7 @@ export filbuf(o:file):int := (
 		    for i from newsize-1 to oldsize by -1 do if o.inbuffer.i == '\n' then (
 			 if o.promptq then (
 			      o << o.reward();
-			      flush(o);
+			      o << flush;
 			      );
 			 return r;
 			 );
@@ -780,24 +808,6 @@ export (o:file) << (x:uchar) : file := o << int(x);
 export (o:file) << (b:bool) : file := (
      o << if b then "true" else "false");
 
-digits(o:varstring,x:double,a:int,b:int):void := (
-     x = x + 0.5 * pow(10.,double(1-a-b));
-     if x >= 10. then (x = x/10.; a = a+1; b = if b==0 then 0 else b-1);
-     while a > 0 do (
-	  putdigit(o,int(x));
-	  x = 10. * (x - double(int(x)));
-	  a = a-1;
-	  );
-     o << '.';
-     lim := pow(10.,double(-b+1));
-     while b > 0 do (
-	  if x < lim then break;
-	  putdigit(o,int(x));
-	  x = 10. * (x - double(int(x)));
-	  lim = lim * 10.;
-	  b = b-1;
-	  ));
-
 export finite(x:double):bool := x==x && x-x == x-x;
 
 export isinf(x:double):bool := x==x && x-x != x-x;
@@ -806,45 +816,11 @@ export isnan(x:double):bool := x!=x;
 
 export tostring(x:bool):string := if x then "true" else "false";
 
-export tostring5(
-     x:double,						-- the number to format
-     s:int,					-- number of significant digits
-     l:int,					   -- max number leading zeroes
-     t:int,				    -- max number extra trailing digits
-     e:string			     -- separator between mantissa and exponent
-     ) : string := (
-     o := newvarstring(25);
-     if isinf(x) then return "infinity";
-     if isnan(x) then return "NotANumber";
-     if x==0. then return "0.";
-     if x<0. then (o << '-'; x=-x);
-     oldx := x;
-     i := 0;
-     if x >= 1. then (
-     	  until x < 10000000000. do ( x = x/10000000000.; i = i + 10 );
-     	  until x < 100000. do ( x = x/100000.; i = i + 5 );
-     	  until x < 100. do ( x = x/100.; i = i + 2 );
-     	  until x < 10. do ( x = x/10.; i = i + 1 );
-	  )
-     else (
-     	  until x >= 1./10000000000. do ( x = x*10000000000.; i = i - 10 );
-     	  until x >= 1./100000. do ( x = x*100000.; i = i - 5 );
-     	  until x >= 1./100. do ( x = x*100.; i = i - 2 );
-     	  until x >= 1. do ( x = x*10.; i = i - 1 );
-	  );
-     -- should rewrite this so the format it chooses is the one that takes the least space, preferring not to use the exponent when it's a tie
-     if i<0 then (
-	  if -i <= l 
-	  then digits(o,oldx,1,s-i-1)
-	  else (digits(o,x,1,s-1); o << e << tostring(i);))
-     else if i+1 > s then (
-	  if i+1-s <= t
-	  then digits(o,x,i+1,0)
-	  else (digits(o,x,1,s-1); o << e << tostring(i);))
-     else digits(o,x,i+1,s-i-1);
-     tostring(o));
-
-export tostringRR(x:double) : string := tostring5(x,6,5,5,"e");
+export tostringRR(x:double) : string := (
+    o := newstring(25);
+    Ccode(void, "snprintf((char *)", o, "->array, 25, \"%g\", ", x, ")");
+    Ccode(void, o, "->len = strlen((char *)", o, "->array)");
+    o);
 
 export (o:file) << (x:double) : file := o << tostringRR(x);
 
@@ -869,11 +845,11 @@ export getc(o:file):int := (
      	       e != '\n'
 	       )
 	  do nothing;
-	  flush(stdIO);
+	  stdIO << flush;
 	  );
      if c == nl then (
 	  o.bol = true;
-	  if o.echo then flush(stdIO);
+	  if o.echo then stdIO << flush;
 	  );
      x:=int(uchar(c));
      endFileInput(o);
@@ -893,7 +869,7 @@ export read(o:file):StringOrError := (
      o.inindex = 0;
      if o.echo then (
 	  stdIO << s;
-	  flush(stdIO);
+	  stdIO << flush;
 	  );
      sc:=stringCell(s);
      endFileInput(o);
@@ -951,7 +927,7 @@ export setprompt(o:file,prompt:function():string):void := ( o.promptq = true; o.
 
 export unsetprompt(o:file):void := ( o.promptq = false; o.prompt = noprompt; o.reward=noprompt; );
 
-export clean(o:file):void := flush(o);
+export clean(o:file):void := flushFile(o);
 
 export get(filename:string):StringOrError := (
      when openIn(filename)
@@ -960,29 +936,12 @@ export get(filename:string):StringOrError := (
 	  when readfile(f.infd)
 	  is null do (
 	       close(f);
-	       StringOrError(errmsg(fileErrorMessage(f,"read")))
-	       )
+	       StringOrError(errmsg(fileErrorMessage(f,"read"))))
 	  is s:string do (
 	       r := close(f);
 	       when r is m:errmsg
 	       do StringOrError(m)
 	       else StringOrError(stringCell(s)))));
-
-export Manipulator := {fun:function(file):int};
-
-export (o:file) << (m:Manipulator) : file := (
-     m.fun(o);				  -- ignoring error here
-     o
-     );
-
-export endl := Manipulator(endlfun);
-
-export Flush := Manipulator(flush);
-
-export (o:BasicFile) << (m:Manipulator) : int := (
-     if m == endl then o << basicEndl
-     else if m == Flush then o << basicFlush
-     else -1);
 
 export fchmod(o:file,mode:int):int := (
      if o.input && o.infd != -1 then if -1 == fchmod(o.infd,mode) then return -1;
@@ -1009,33 +968,37 @@ export (o:file) << (x:long) : file :=  o << tostring(x);
 
 export (o:file) << (x:ulong) : file :=  o << tostring(x);
 
+export (o:file) << (x:hash_t) : file := o << tostring(x);
+
 export setIOSynchronized(e:Expr):Expr :=(
      when e
      is a:Sequence do (
 	  if length(a) == 0
-	  then (setFileThreadState(stdIO,1); setFileThreadState(stdError,1); nullE)
-	  else WrongNumArgs(0))
-     else WrongNumArgs(0)
+	  then (setFileThreadMode(stdIO,1); setFileThreadMode(stdError,1); nullE)
+	  else WrongNumArgs(0, 1))
+     is f:file do (setFileThreadMode(f, 1); nullE)
+     else WrongArg("a file or ()")
 );
 
 export setIOExclusive(e:Expr):Expr :=(
      when e
      is a:Sequence do (
 	  if length(a) == 0
-	  then (setFileThreadState(stdIO,2); setFileThreadState(stdError,2); nullE)
-	  else WrongNumArgs(0))
-     else WrongNumArgs(0)
+	  then (setFileThreadMode(stdIO,2); setFileThreadMode(stdError,2); nullE)
+	  else WrongNumArgs(0, 1))
+     is f:file do (setFileThreadMode(f, 2); nullE)
+     else WrongArg("a file or ()")
 );
 
 export setIOUnSynchronized(e:Expr):Expr :=(
      when e
      is a:Sequence do (
 	  if length(a) == 0
-	  then (setFileThreadState(stdIO,0); setFileThreadState(stdError,0); nullE)
-	  else WrongNumArgs(0))
-     else WrongNumArgs(0)
+	  then (setFileThreadMode(stdIO,0); setFileThreadMode(stdError,0); nullE)
+	  else WrongNumArgs(0, 1))
+     is f:file do (setFileThreadMode(f, 0); nullE)
+     else WrongArg("a file or ()")
 );
-
 
 -- Local Variables:
 -- compile-command: "echo \"make: Entering directory \\`$M2BUILDDIR/Macaulay2/d'\" && make -C $M2BUILDDIR/Macaulay2/d stdio.o "

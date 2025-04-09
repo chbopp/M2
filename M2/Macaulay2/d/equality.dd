@@ -2,10 +2,13 @@
 use util;
 use tokens;
 
-header "
-  #include <engine.h>
-  #include <monomial.hpp>
-";
+header "// required for equality checks
+#include <interface/freemodule.h>           // for IM2_FreeModule_is_equal
+#include <interface/matrix.h>               // for IM2_Matrix_is_equal
+#include <interface/monomial-ideal.h>       // for IM2_MonomialIdeal_is_equal
+#include <interface/ringelement.h>          // for IM2_RingElement_is_equal
+#include <interface/ringmap.h>              // for IM2_RingMap_is_equal
+#include <monomial.hpp>                     // for EngineMonomial"; -- TODO: remove this one
 
 equal(lhs:Expr,rhs:Expr):Expr;
 
@@ -13,8 +16,8 @@ equal(x:HashTable,y:HashTable):Expr := (
      if x == y then return True;
      if x.hash != y.hash then return False;
      if x.Class != y.Class || x.parent != y.parent then return False;
-     if x.hash == 0 && x.Class == cacheTableClass then return True; -- cache tables have hash code 0
-     if x.Mutable || y.Mutable then return False;
+     if x.hash == hash_t(0) && x.Class == cacheTableClass then return True; -- cache tables have hash code 0
+     if x.Mutable || y.Mutable then return False;	-- so we don't need to lockRead() after this
      if x.numEntries != y.numEntries || length(x.table) != length(y.table) then return False;
      foreach a at i in x.table do (
 	  p := a;
@@ -118,11 +121,18 @@ export equal(lhs:Expr,rhs:Expr):Expr := (
 	       )
 	  -- other cases needed soon
 	  else False)
-     is c:CodeClosure do (
+     is c:PseudocodeClosure do (
 	  when rhs
-	  is d:CodeClosure do (
+	  is d:PseudocodeClosure do (
 	       if c.frame == d.frame
 	       && c.code == d.code
+	       then True else False)
+	  else False
+	  )
+     is c:Pseudocode do (
+	  when rhs
+	  is d:Pseudocode do (
+	       if c.code == d.code
 	       then True else False)
 	  else False
 	  )
@@ -132,6 +142,12 @@ export equal(lhs:Expr,rhs:Expr):Expr := (
 	       if strictequality(x.v,y.v) then True else False
 	       )
 	  else False)
+     is x:RRicell do ( -- Added for MPFI
+	  when rhs
+	  is y:RRicell do (
+	      if strictequality(x.v,y.v) then True else False
+	      )
+	  else False)  -- End added for MPFI
      is x:CCcell do (
 	  when rhs
 	  is y:CCcell do (
@@ -161,7 +177,13 @@ export equal(lhs:Expr,rhs:Expr):Expr := (
 	       )
 	  else False
 	  )
-     is RawRingCell do False
+     is x:RawRingCell do (
+	  when rhs
+	  is y:RawRingCell do (
+	      if x.p == y.p then True else False
+	       )
+	  else False
+	  )
      is x:RawMonomialIdealCell do (
 	  when rhs
 	  is y:RawMonomialIdealCell do (
@@ -207,9 +229,9 @@ export equal(lhs:Expr,rhs:Expr):Expr := (
      is RawPathTrackerCell do False
      is RawPointArrayCell do False
      -- NAG end
-     is x:RawComputationCell do (
+     is RawComputationCell do (
 	  when rhs
-	  is y:RawComputationCell do (
+	  is RawComputationCell do (
 	       False
 	       -- toExpr(Ccode(bool, "IM2_GB_is_equal(",x,",",y,")"))
 	       )
@@ -227,8 +249,16 @@ export equal(lhs:Expr,rhs:Expr):Expr := (
      is pythonObjectCell do False
      is xmlNodeCell do False				    -- unimplemented
      is xmlAttrCell do False				    -- unimplemented
-     is x:TaskCell do False
-     is x:fileOutputSyncState do False
+     is TaskCell do False
+     is fileOutputSyncState do False
+     is x:pointerCell do
+	 when rhs
+	 is y:pointerCell do if x.v == y.v then True else False
+	 else False
+     is x:atomicIntCell do (
+	 when rhs
+	 is y:atomicIntCell do if x == y then True else False
+	 else False)
      );
 
 -- Local Variables:

@@ -3,28 +3,34 @@
 use evaluate;
 use struct;
 
-export plus0():Expr := Expr(ZZcell(toInteger(0)));
-export times0():Expr := Expr(ZZcell(toInteger(1)));
+header "#include <assert.h>";
+
+export plus0():Expr := zeroE;
+export times0():Expr := oneE;
 export plus1(e:Expr) : Expr := e;
 times1 := plus1;
+
+export DivisionByZero():Expr := buildErrorPacket("division by zero");
 
 export (lhs:Expr) + (rhs:Expr) : Expr := (
      when lhs
      is x:ZZcell do (
 	  when rhs
-	  is y:ZZcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, ZZ, ZZ, ZZ
+	      is y:ZZcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, ZZ, ZZ, ZZ
      	  is y:QQcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, ZZ, QQ, QQ
      	  is y:RRcell do toExpr(y.v + x.v)			    -- # typical value: symbol +, ZZ, RR, RR
+          is y:RRicell do toExpr(y.v + x.v)             -- # typical value: symbol +, ZZ, RRi, RRi
      	  is y:CCcell do toExpr(toRR(x.v,precision(y.v.re)) + y.v)	    -- # typical value: symbol +, ZZ, CC, CC
-	  is Error do rhs
-	  else binarymethod(lhs,rhs,PlusS))
+	      is Error do rhs
+	      else binarymethod(lhs,rhs,PlusS))
      is x:QQcell do (
 	  when rhs
-	  is y:ZZcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, QQ, ZZ, QQ
+	      is y:ZZcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, QQ, ZZ, QQ
      	  is y:QQcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, QQ, QQ, QQ
      	  is y:RRcell do toExpr(y.v + x.v)			    -- # typical value: symbol +, QQ, RR, RR
+          is y:RRicell do toExpr(y.v + x.v)             -- # typical value: symbol +, QQ, RRi, RRi
      	  is y:CCcell do toExpr(toRR(x.v,precision(y.v.re)) + y.v)	    -- # typical value: symbol +, QQ, CC, CC
-	  is Error do rhs
+	      is Error do rhs
 	  else binarymethod(lhs,rhs,PlusS))
      is x:RawRingElementCell do (
 	  when rhs
@@ -37,12 +43,21 @@ export (lhs:Expr) + (rhs:Expr) : Expr := (
 	  else binarymethod(lhs,rhs,PlusS))
      is x:RRcell do (
 	  when rhs
-	  is y:ZZcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, RR, ZZ, RR
+	      is y:ZZcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, RR, ZZ, RR
      	  is y:QQcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, RR, QQ, RR
      	  is y:RRcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, RR, RR, RR
+	      is y:RRicell do toExpr(y.v + x.v)             -- # typical value: symbol +, RR, RRi, RRi
      	  is y:CCcell do toExpr(x.v + y.v)			    -- # typical value: symbol +, RR, CC, CC
-	  is Error do rhs
-	  else binarymethod(lhs,rhs,PlusS))
+	      is Error do rhs
+	      else binarymethod(lhs,rhs,PlusS))
+     is x:RRicell do (
+        when rhs
+	     is y:ZZcell do toExpr(x.v + y.v)               -- # typical value: symbol +, RRi, ZZ, RRi
+	     is y:QQcell do toExpr(x.v + y.v)               -- # typical value: symbol +, RRi, QQ, RRi
+	     is y:RRcell do toExpr(x.v + y.v)               -- # typical value: symbol +, RRi, RR, RRi
+         is y:RRicell do toExpr(x.v + y.v)              -- # typical value: symbol +, RRi, RRi, RRi
+	     is Error do rhs
+	     else binarymethod(lhs,rhs,PlusS))
      is x:CCcell do (
 	  when rhs
 	  is y:ZZcell do toExpr(x.v + toRR(y.v,precision(x.v.re)))	    -- # typical value: symbol +, CC, ZZ, CC
@@ -78,6 +93,12 @@ export (lhs:Expr) + (rhs:Expr) : Expr := (
 	       )
 	  is Error do rhs
 	  else binarymethod(lhs,rhs,PlusS))
+     is x:pointerCell do (
+	  when rhs
+	  is y:ZZcell do Expr(pointerCell(Ccode(voidPointer, x.v, " + ",
+		      toLong(y))))
+	  is Error do rhs
+	  else binarymethod(lhs,rhs,PlusS))
      is Error do lhs
      else binarymethod(lhs,rhs,PlusS));
 plus(e:Expr):Expr := accumulate(plus0,plus1,op+,e);
@@ -89,6 +110,7 @@ plusfun1(rhs:Code):Expr := (
      is Error do r
      is ZZcell do r						    -- # typical value: symbol +, ZZ, ZZ
      is RRcell do r						    -- # typical value: symbol +, RR, RR
+     is RRicell do r                        -- # typical value: symbol +, RRi, RRi
      is CCcell do r						    -- # typical value: symbol +, CC, CC
      is QQcell do r						    -- # typical value: symbol +, QQ, QQ
      is RawRingElementCell do r				    -- # typical value: symbol +, RawRingElement, RawRingElement
@@ -106,7 +128,8 @@ setup(PlusS,plusfun1,plusfun);
 export - (rhs:Expr) : Expr := (
      when rhs
      is x:ZZcell do toExpr(-x.v)				    -- # typical value: symbol -, ZZ, ZZ                            
-     is x:RRcell do toExpr(-x.v)				    -- # typical value: symbol -, RR, RR                            
+     is x:RRcell do toExpr(-x.v)				    -- # typical value: symbol -, RR, RR
+     is x:RRicell do toExpr(-x.v)                   -- # typical value: symbol -, RRi, RRi
      is x:CCcell do toExpr(-x.v)				    -- # typical value: symbol -, CC, CC                            
      is x:QQcell do toExpr(-x.v)				    -- # typical value: symbol -, QQ, QQ                            
      is x:RawRingElementCell do toExpr(-x.p)			    -- # typical value: symbol -, RawRingElement, RawRingElement    
@@ -126,23 +149,25 @@ export (lhs:Expr) - (rhs:Expr) : Expr := (
      when lhs
      is x:ZZcell do (
 	  when rhs
-	  is y:ZZcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, ZZ, ZZ, ZZ
+	      is y:ZZcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, ZZ, ZZ, ZZ
      	  is y:QQcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, ZZ, QQ, QQ
-	  is y:RRcell do toExpr(toRR(x.v,precision(y.v)) - y.v)		    -- # typical value: symbol -, ZZ, RR, RR
-	  is y:CCcell do toExpr(toRR(x.v,precision(y.v.re)) - y.v)	    -- # typical value: symbol -, ZZ, CC, CC
-	  is Error do rhs
-	  else binarymethod(lhs,rhs,MinusS))
+	      is y:RRcell do toExpr(toRR(x.v,precision(y.v)) - y.v)		    -- # typical value: symbol -, ZZ, RR, RR
+          is y:RRicell do toExpr(toRRi(x.v,precision(y.v)) - y.v)       -- # typical value: symbol -, ZZ, RRi, RRi
+	      is y:CCcell do toExpr(toRR(x.v,precision(y.v.re)) - y.v)	    -- # typical value: symbol -, ZZ, CC, CC
+	      is Error do rhs
+	      else binarymethod(lhs,rhs,MinusS))
      is x:QQcell do (
-	  when rhs
-	  is y:ZZcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, QQ, ZZ, QQ
+      when rhs
+	      is y:ZZcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, QQ, ZZ, QQ
      	  is y:QQcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, QQ, QQ, QQ
-	  is y:RRcell do toExpr(toRR(x.v,precision(y.v)) - y.v)		    -- # typical value: symbol -, QQ, RR, RR
-	  is y:CCcell do toExpr(toRR(x.v,precision(y.v.re)) - y.v)	    -- # typical value: symbol -, QQ, CC, CC
-	  is Error do rhs
-	  else binarymethod(lhs,rhs,MinusS))
+	      is y:RRcell do toExpr(toRR(x.v,precision(y.v)) - y.v)		    -- # typical value: symbol -, QQ, RR, RR
+          is y:RRicell do toExpr(toRRi(x.v,precision(y.v)) - y.v)       -- # typical value: symbol -, QQ, RRi, RRi
+	      is y:CCcell do toExpr(toRR(x.v,precision(y.v.re)) - y.v)	    -- # typical value: symbol -, QQ, CC, CC
+	      is Error do rhs
+	      else binarymethod(lhs,rhs,MinusS))
      is x:RawRingElementCell do (
 	  when rhs
-	  is y:RawRingElementCell do (			    -- # typical value: symbol -, RawRingElement, RawRingElement, RawRingElement
+	      is y:RawRingElementCell do (			    -- # typical value: symbol -, RawRingElement, RawRingElement, RawRingElement
 	       when x.p-y.p
 	       is t:RawRingElement do toExpr(t)
 	       is null do buildErrorPacket(EngineError("polynomial subtraction failed"))
@@ -154,9 +179,18 @@ export (lhs:Expr) - (rhs:Expr) : Expr := (
 	  is y:ZZcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, RR, ZZ, RR
      	  is y:QQcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, RR, QQ, RR
 	  is y:RRcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, RR, RR, RR
+      is y:RRicell do toExpr(toRRi(x.v) - y.v)     -- # typical value: symbol -, RR, RRi, RRi
 	  is y:CCcell do toExpr(x.v - y.v)			    -- # typical value: symbol -, RR, CC, CC
 	  is Error do rhs
 	  else binarymethod(lhs,rhs,MinusS))
+    is x:RRicell do (
+      when rhs
+	       is y:ZZcell do toExpr(x.v - y.v) -- # typical value: symbol -, RRi, ZZ, RRi
+	       is y:QQcell do toExpr(x.v - y.v) -- # typical value: symbol -, RRi, QQ, RRi
+	       is y:RRcell do toExpr(x.v - y.v) -- # typical value: symbol -, RRi, RR, RRi
+           is y:RRicell do toExpr(x.v - y.v) -- # typical value: symbol -, RRi, RRi, RRi
+	       is Error do rhs
+	       else binarymethod(lhs,rhs,MinusS))
      is x:CCcell do (
 	  when rhs
 	  is y:ZZcell do toExpr(x.v - toRR(y.v,precision(x.v.re)))	    -- # typical value: symbol -, CC, ZZ, CC
@@ -216,8 +250,6 @@ differencefun(e:Expr):Expr := (
 	  else WrongNumArgs(2))
      else WrongNumArgs(2));
 setupfun("difference",differencefun);
-one := toInteger(1);
-minusone := toInteger(-1);
 
 export (lhs:Expr) * (rhs:Expr) : Expr := (
      when lhs
@@ -226,6 +258,7 @@ export (lhs:Expr) * (rhs:Expr) : Expr := (
 	  is y:ZZcell do toExpr(x.v * y.v)			    -- # typical value: symbol *, ZZ, ZZ, ZZ
      	  is y:QQcell do toExpr(x.v * y.v)			    -- # typical value: symbol *, ZZ, QQ, QQ
      	  is y:RRcell do toExpr(toRR(x.v,precision(y.v)) * y.v)		    -- # typical value: symbol *, ZZ, RR, RR
+          is y:RRicell do toExpr(y.v * x.v)     -- # typical value: symbol *, ZZ, RRi, RRi
      	  is y:CCcell do toExpr(x.v * y.v)	    -- # typical value: symbol *, ZZ, CC, CC
 	  is Error do rhs
 	  else binarymethod(lhs,rhs,StarS))
@@ -234,6 +267,7 @@ export (lhs:Expr) * (rhs:Expr) : Expr := (
 	  is y:ZZcell do toExpr(x.v * y.v)			    -- # typical value: symbol *, QQ, ZZ, QQ
      	  is y:QQcell do toExpr(x.v * y.v)			    -- # typical value: symbol *, QQ, QQ, QQ
      	  is y:RRcell do toExpr(y.v * x.v)			    -- # typical value: symbol *, QQ, RR, RR
+          is y:RRicell do toExpr(y.v * x.v)             -- # typical value: symbol *, QQ, RRi, RRi
      	  is y:CCcell do toExpr(y.v * toRR(x.v,precision(y.v.re)))	    -- # typical value: symbol *, QQ, CC, CC
 	  is Error do rhs
 	  else binarymethod(lhs,rhs,StarS))
@@ -261,10 +295,19 @@ export (lhs:Expr) * (rhs:Expr) : Expr := (
 	  is y:ZZcell do toExpr(x.v * y.v)			    -- # typical value: symbol *, RR, ZZ, RR
      	  is y:QQcell do toExpr(x.v * y.v)			    -- # typical value: symbol *, RR, QQ, RR
      	  is y:RRcell do toExpr(x.v * y.v)			    -- # typical value: symbol *, RR, RR, RR
+          is y:RRicell do toExpr(y.v * x.v)             -- # typical value: symbol *, RR, RRi, RRi
      	  is y:CCcell do toExpr(x.v * y.v)			    -- # typical value: symbol *, RR, CC, CC
 	  is Error do rhs
 	  else binarymethod(lhs,rhs,StarS))
-     is x:CCcell do (
+      is x:RRicell do (
+      when rhs
+	       is y:ZZcell do toExpr(x.v * y.v)  -- # typical value: symbol *, RRi, ZZ, RRi
+	       is y:QQcell do toExpr(x.v * y.v)  -- # typical value: symbol *, RRi, QQ, RRi
+	       is y:RRcell do toExpr(x.v * y.v)  -- # typical value: symbol *, RRi, RR, RRi
+           is y:RRicell do toExpr(x.v * y.v) -- # typical value: symbol *, RRi, RRi, RRi
+	       is Error do rhs
+	       else binarymethod(lhs,rhs,StarS))
+    is x:CCcell do (
 	  when rhs
 	  is y:ZZcell do toExpr(x.v * y.v)	    -- # typical value: symbol *, CC, ZZ, CC
      	  is y:QQcell do toExpr(x.v * toRR(y.v,precision(x.v.re)))	    -- # typical value: symbol *, CC, QQ, CC
@@ -288,7 +331,7 @@ export (lhs:Expr) * (rhs:Expr) : Expr := (
 	       is null do buildErrorPacket(EngineError("monomial ideal multiplication failed"))
 	       )
 	  else binarymethod(lhs,rhs,StarS))
-     is x:RawMatrixCell do (				    -- # typical value: symbol *, RawMatrix, RawRingElement, RawRingElement
+     is x:RawMatrixCell do (					    -- # typical value: symbol *, RawMatrix, RawRingElement, RawMatrix
 	  when rhs
 	  is y:RawRingElementCell do (
 	       when x.p*y.p
@@ -329,14 +372,15 @@ export (lhs:Expr) / (rhs:Expr) : Expr := (
 	  when rhs
 	  is y:ZZcell do (					    -- # typical value: symbol /, ZZ, ZZ, ZZ
 	       if y.v === 0
-	       then buildErrorPacket("division by zero")
+	       then DivisionByZero()
 	       else toExpr(x.v / y.v))
      	  is y:QQcell do (					    -- # typical value: symbol /, ZZ, QQ, QQ
 	       if y.v === 0
-	       then buildErrorPacket("division by zero")
+	       then DivisionByZero()
 	       else toExpr(x.v / y.v))
      	  is y:RRcell do (					    -- # typical value: symbol /, ZZ, RR, RR
 	       toExpr(toRR(x.v,precision(y.v)) / y.v))
+          is y:RRicell do (toExpr(x.v / y.v))   -- # typical value: symbol /, ZZ, RRi, RRi
      	  is y:CCcell do (					    -- # typical value: symbol /, ZZ, CC, CC
 	       toExpr(x.v / y.v))
 	  is Error do rhs
@@ -345,16 +389,17 @@ export (lhs:Expr) / (rhs:Expr) : Expr := (
 	  when rhs
 	  is y:ZZcell do (					    -- # typical value: symbol /, QQ, ZZ, QQ
 	       if y.v === 0
-	       then buildErrorPacket("division by zero")
+	       then DivisionByZero()
 	       else toExpr(x.v / y.v))
      	  is y:QQcell do (					    -- # typical value: symbol /, QQ, QQ, QQ
 	       if y.v === 0
-	       then buildErrorPacket("division by zero")
+	       then DivisionByZero()
 	       else toExpr(x.v / y.v))
      	  is y:RRcell do (					    -- # typical value: symbol /, QQ, RR, RR
 	       toExpr(toRR(x.v,precision(y.v)) / y.v))
+          is y:RRicell do (toExpr(x.v / y.v))   -- # typical value: symbol /, QQ, RRi, RRi
      	  is y:CCcell do (					    -- # typical value: symbol /, QQ, CC, CC
-	       if y.v === 0 then buildErrorPacket("division by zero") else
+	       if y.v === 0 then DivisionByZero() else
 	       toExpr(toRR(x.v,precision(y.v.re)) / y.v))
 	  is Error do rhs
 	  else binarymethod(lhs,rhs,DivideS))
@@ -362,28 +407,43 @@ export (lhs:Expr) / (rhs:Expr) : Expr := (
 	  when rhs
 	  is y:ZZcell do (					    -- # typical value: symbol /, RR, ZZ, RR
 	       if y.v === 0
-	       then buildErrorPacket("division by zero")
+	       then DivisionByZero()
 	       else toExpr(x.v / y.v))
      	  is y:QQcell do (					    -- # typical value: symbol /, RR, QQ, RR
 	       if y.v === 0
-	       then buildErrorPacket("division by zero")
+	       then DivisionByZero()
 	       else toExpr(x.v / y.v))
      	  is y:RRcell do (					    -- # typical value: symbol /, RR, RR, RR
 	       toExpr(x.v / y.v))
+          is y:RRicell do (toExpr(x.v / y.v))   -- # typical value: symbol /, RR, RRi, RRi
      	  is y:CCcell do (					    -- # typical value: symbol /, RR, CC, CC
 	       toExpr(x.v / y.v))
 	  is Error do rhs
 	  else binarymethod(lhs,rhs,DivideS))
+    is x:RRicell do (
+      when rhs
+	       is y:ZZcell do (                     -- # typical value: symbol /, RRi, ZZ, RRi
+	         if y.v === 0
+	         then DivisionByZero()
+	         else toExpr(x.v / y.v))
+           is y:QQcell do (                      -- # typical value: symbol /, RRi, QQ, RRi
+	         if y.v === 0
+	         then DivisionByZero()
+	         else toExpr(x.v / y.v))
+           is y:RRcell do (toExpr(x.v / y.v))    -- # typical value: symbol /, RRi, RR, RRi
+           is y:RRicell do (toExpr(x.v / y.v))   -- # typical value: symbol /, RRi, RRi, RRi
+	       is Error do rhs
+	       else binarymethod(lhs,rhs,DivideS))
      is x:CCcell do (
 	  when rhs
 	  is y:ZZcell do (					    -- # typical value: symbol /, CC, ZZ, CC
 	       if y.v === 0
-	       then buildErrorPacket("division by zero")
+	       then DivisionByZero()
 	       else toExpr(x.v / toRR(y.v,precision(x.v.re)))
 	       )
      	  is y:QQcell do (					    -- # typical value: symbol /, CC, QQ, CC
 	       if y.v === 0
-	       then buildErrorPacket("division by zero")
+	       then DivisionByZero()
 	       else toExpr(x.v / toRR(y.v,precision(x.v.re)))
 	       )
      	  is y:RRcell do (					    -- # typical value: symbol /, CC, RR, CC
@@ -446,33 +506,16 @@ setup(BackslashBackslashS,BackslashBackslashFun);
 
 adjacentFun(lhs:Code,rhs:Code):Expr := eval(Code(adjacentCode(lhs,rhs,codePosition(rhs))));
 setup(AdjacentS,adjacentFun);
-
-doublepower(x:double,n:int):double := (
-     if n == 0 then return 1.0;
-     if n < 0 then (x = 1./x; n = -n;);
-     y := x;
-     z := 1.0;
-     while true do (
-	  if (n & 1) != 0 then z = z * y;
-	  n = n >> 1;
-	  if n == 0 then break;
-	  y = y * y;
-	  );
-     z
-     );
-BinaryPowerMethod(x:Expr,y:Expr):Expr := (
+BinaryPowerMethod(x:Expr,y:Expr,times:Expr,onex:Expr,inver:Expr):Expr := (
      when y is i0:ZZcell do (
 	  i := i0.v;
 	  if i === 0 then (
-	       onex := lookup(Class(x),oneE);
-	       if onex == nullE then (
-		    return buildErrorPacket("missing unit element")
-		    )
-	       else return onex;
+	       if onex == nullE
+	       then return buildErrorPacket("missing unit element")
+	       else return applyEE(onex, x);
 	       );
 	  if i < 0 then (
 	       i = -i;
-	       inver := lookup(Class(x),InverseS);
 	       if inver == nullE then return MissingMethod("^","InverseMethod");
 	       x = applyEE(inver,x);
 	       );
@@ -484,22 +527,26 @@ BinaryPowerMethod(x:Expr,y:Expr):Expr := (
 	       if (n & 1) != 0 then (
 		    if z == nullE then z=w
 		    else (
-			 z=z*w;
+			 z = applyEEE(times, z, w);
 			 when z is Error do return z else nothing;
 			 ));
 	       n = n >> 1;
 	       if n == 0 then break;
-	       w = w*w;
+	       w = applyEEE(times, w, w);
 	       when w is Error do return w else nothing;
 	       );
 	  z)
      else WrongArgZZ(2));
 BinaryPowerMethodFun(e:Expr):Expr := (
      when e is a:Sequence do
-     if length(a)==2 then
-     BinaryPowerMethod(a . 0, a . 1)
-     else WrongNumArgs(2)
-     else WrongNumArgs(2));
+     if length(a) == 2 then (
+	 t := Class(a . 0);
+	 BinaryPowerMethod(a . 0, a . 1, lookupBinaryMethod(t, t, StarS), lookup(t, oneE), lookup(t, InverseS)))
+     else if length(a) == 5 then (
+	 t := Class(a . 0);
+	 BinaryPowerMethod(a . 0, a . 1, a . 2, a . 3, a . 4))
+     else WrongNumArgs(5)
+     else WrongNumArgs(5));
 setupfun("BinaryPowerMethod",BinaryPowerMethodFun);
 SimplePowerMethod(x:Expr,y:Expr):Expr := (
      when y is i0:ZZcell do (
@@ -508,7 +555,7 @@ SimplePowerMethod(x:Expr,y:Expr):Expr := (
 	       onex := lookup(Class(x),oneE);
 	       if onex == nullE
 	       then return buildErrorPacket("missing unit element")
-	       else return onex;
+	       else return applyEE(onex, x);
 	       );
 	  if i <= 0 then (
 	       i = -i;
@@ -539,17 +586,33 @@ export (lhs:Expr) ^ (rhs:Expr) : Expr := (
      is x:ZZcell do (
 	  when rhs
 	  is y:ZZcell do (
-	       if !isNegative(y.v) then toExpr(x.v^y.v) 
+	       if !isNegative(y.v) 
+	       then (
+		    if isLong(y.v) then toExpr(x.v^y.v)
+		    else buildErrorPacket("expected exponent to be a small integer")
+		    )
 	       else if x.v === 1 then toExpr(x.v)
 	       else if x.v === -1 then (
 		    if int(y.v%ushort(2)) == 0
 		    then oneE
 		    else minusoneE)
-	       else if isZero(x.v) then buildErrorPacket("division by zero")
-	       else toExpr(newRationalCanonical(toInteger(1),x.v^-y.v)))
+	       else if isZero(x.v) then DivisionByZero()
+	       else (
+		    ex := - y.v;
+		    if !isLong(ex)
+		    then buildErrorPacket("expected exponent to be a small integer")
+		    else (
+	       	    	 den := x.v^ex;
+		    	 if isNegative(den)
+		    	 then toExpr(newQQCanonical(minusoneZZ,-den))
+		    	 else toExpr(newQQCanonical(     oneZZ, den)))))
 	  is y:QQcell do (
+	       if isZero(x.v) && isNegative(y.v)
+	       then return DivisionByZero();
 	       d := denominator(y.v);
-	       if d === 1 then toExpr(x.v^numerator(y.v))
+	       if d === 1 then (
+		    if isNegative(y.v) then toExpr(oneZZ/x.v^(-numerator(y.v)))
+		    else toExpr(x.v^numerator(y.v)))
 	       else if isNegative(x.v)
 	       then if isOdd(d) then (
 		    if isOdd(numerator(y.v))
@@ -565,15 +628,33 @@ export (lhs:Expr) ^ (rhs:Expr) : Expr := (
 	       then toExpr(toCC(x.v,precision(y.v))^y.v)
 	       else toExpr(toRR(x.v,precision(y.v))^y.v)
 	       )
+	  is y:RRicell do (
+	       if isULong(x.v) then toExpr(toULong(x.v) ^ y.v)
+	       else if isNegative(x.v)
+	       then buildErrorPacket("negative base not implemented")
+	       else toExpr(toRR(x.v,precision(y.v))^y.v)
+	       )
 	  is y:CCcell do toExpr(toRR(x.v,precision(y.v))^y.v)
      	  is Error do rhs
 	  else binarymethod(lhs,rhs,PowerS))
      is x:QQcell do (
 	  when rhs
-	  is y:ZZcell do toExpr(x.v^y.v)
+	  is y:ZZcell do (
+	       if isZero(x.v) && isNegative(y.v)
+	       then return DivisionByZero();
+	       if isLong(y.v) 
+	       then toExpr(x.v^y.v)
+	       else buildErrorPacket("expected exponent to be a small integer")
+	       )
 	  is y:QQcell do (
+	       if isZero(x.v) && isNegative(y.v)
+	       then return DivisionByZero();
 	       d := denominator(y.v);
-	       if d === 1 then toExpr(x.v^numerator(y.v))
+	       if d === 1 then (
+		    if isLong(numerator(y.v))
+		    then toExpr(x.v^numerator(y.v))
+		    else buildErrorPacket("expected exponent to have a small numerator")
+		    )
 	       else if isNegative(x.v)
 	       then if isOdd(d) then (
 		    if isOdd(numerator(y.v))
@@ -586,6 +667,10 @@ export (lhs:Expr) ^ (rhs:Expr) : Expr := (
 	  is y:RRcell do (
 	       if isNegative(x.v)
 	       then toExpr(toCC(x.v,precision(y.v))^y.v)
+	       else toExpr(toRR(x.v,precision(y.v))^y.v))
+      is y:RRicell do (
+	       if isNegative(x.v)
+	       then buildErrorPacket("negative base not implemented")
 	       else toExpr(toRR(x.v,precision(y.v))^y.v))
 	  is y:CCcell do toExpr(toRR(x.v,precision(y.v))^y.v)
      	  is Error do rhs
@@ -610,9 +695,34 @@ export (lhs:Expr) ^ (rhs:Expr) : Expr := (
 	       then toExpr(toCC(x.v)^y.v)
 	       else toExpr(x.v^y.v)
 	       )
+      is y:RRicell do (
+	       if isNegative(x.v)
+	       then buildErrorPacket("negative base not implemented")
+	       else toExpr(x.v^y.v)
+	       )
 	  is y:CCcell do toExpr(x.v^y.v)
      	  is Error do rhs
 	  else binarymethod(lhs,rhs,PowerS))
+    is x:RRicell do (
+	  when rhs
+	  is y:ZZcell do toExpr(x.v^y.v)
+	  is y:QQcell do (
+	       d := denominator(y.v);
+	       if d === 1 then toExpr(x.v^numerator(y.v))
+	       else if x.v >= 0 then toExpr(x.v^(toRRi(y.v)))
+           else buildErrorPacket("negative base not implemented")
+           )
+	  is y:RRcell do (
+	       if x.v >= 0
+	       then toExpr(x.v^y.v)
+	       else buildErrorPacket("negative base not implemented")
+	       )
+      is y:RRicell do (
+	       if x.v >= 0
+	       then toExpr(x.v^y.v)
+	       else buildErrorPacket("negative base not implemented")
+	       )
+      else binarymethod(lhs,rhs,PowerS))
      is x:CCcell do (
 	  when rhs
 	  is y:ZZcell do toExpr(x.v^y.v)
@@ -675,6 +785,8 @@ logorfun(lhs:Code,rhs:Code):Expr := (
 		    else binarymethod(left,right,orS)))
 	  else binarymethod(left,rhs,orS)));
 setup(orS,logorfun);
+logxorfun(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,xorS);
+setup(xorS,logxorfun);
 BarBarF(lhs:Code,rhs:Code):Expr := binarymethod(lhs,rhs,BarBarS);
 setup(BarBarS,BarBarF);
 logandfun(lhs:Code,rhs:Code):Expr := (
@@ -700,8 +812,9 @@ export notFun(rhs:Code):Expr := (
      else if a == True then False
      else if a == False then True
      else unarymethod(a,notS));
-setup(notS,notFun);
+setupop(notS,notFun);
 EqualEqualEqualfun(lhs:Code,rhs:Code):Expr := (
+    -- # typical value: symbol ===, Thing, Thing, Boolean
      x := eval(lhs);
      when x is Error do x
      else (
@@ -712,6 +825,7 @@ setup(EqualEqualEqualS,EqualEqualEqualfun);
 quicknot(z:Expr):Expr := (
      when z is Error do z else if z == True then False else True
      );
+-- # typical value: symbol =!=, Thing, Thing, Boolean
 notEqualEqualEqualfun(lhs:Code,rhs:Code):Expr := quicknot(EqualEqualEqualfun(lhs,rhs));
 setup(NotEqualEqualEqualS,notEqualEqualEqualfun);
 smallintarrays0 := new array(Expr) len 20 at i do (
@@ -728,6 +842,7 @@ DotDotfun(lhs:Code,rhs:Code):Expr := (
 	  when right
 	  is Error do right
 	  is yy:ZZcell do (
+	      -- # typical value: symbol .., ZZ, ZZ, Sequence
 	       y := yy.v;
 	       if isInt(x) && isInt(y) then (
 	  	    i := toInt(x);
@@ -759,6 +874,7 @@ DotDotLessFun(lhs:Code,rhs:Code):Expr := (
 	  when right
 	  is Error do right
 	  is yy:ZZcell do (
+	      -- # typical value: symbol ..<, ZZ, ZZ, Sequence
 	       y := yy.v;
 	       if isInt(x) && isInt(y) then (
 	  	    i := toInt(x);
@@ -790,6 +906,7 @@ assignNewFun(newclass:Code,rhs:Code):Expr := (
      is o:HashTable do installMethod(NewE,o,eval(rhs))
      else printErrorMessageE(newclass,"expected a hash table as prospective class"));
 AssignNewFun = assignNewFun;
+setup(NewS,AssignNewFun);
 assignNewOfFun(newclass:Code,newparent:Code,rhs:Code):Expr := (
      c := eval(newclass);
      when c is Error do c
@@ -800,6 +917,7 @@ assignNewOfFun(newclass:Code,newparent:Code,rhs:Code):Expr := (
 	  else printErrorMessageE(newparent,"expected a hash table as prospective parent"))
      else printErrorMessageE(newclass,"expected a hash table as prospective class"));
 AssignNewOfFun = assignNewOfFun;
+setup(NewOfS,AssignNewOfFun);
 assignNewFromFun(newclass:Code,newinitializer:Code,rhs:Code):Expr := (
      c := eval(newclass);
      when c is Error do c
@@ -810,6 +928,7 @@ assignNewFromFun(newclass:Code,newinitializer:Code,rhs:Code):Expr := (
      	  else printErrorMessageE(newinitializer,"expected a hash table"))
      else printErrorMessageE(newclass,"expected a hash table as prospective class"));
 AssignNewFromFun = assignNewFromFun;
+setup(NewFromS,AssignNewFromFun);
 assignNewOfFromFun(args:CodeSequence):Expr := (
      newclass := args.0;
      newparent := args.1;
@@ -836,6 +955,7 @@ assignNewOfFromFun(args:CodeSequence):Expr := (
      else printErrorMessageE(newclass,"expected a hash table as prospective class")
      );
 AssignNewOfFromFun = assignNewOfFromFun;
+setup(NewOfFromS,AssignNewOfFromFun);
 installFun2(a:Expr,args:CodeSequence):Expr := (
      opr := eval(args.0);
      when opr 
@@ -900,6 +1020,7 @@ installMethodFun2(arg1:Expr,args:CodeSequence):Expr := (
      else buildErrorPacket("expected left hand parameter to be a function, type, or a hash table"));
 installMethodFun(args:CodeSequence):Expr := installMethodFun2(eval(args.1),args);
 InstallMethodFun = installMethodFun;
+setup(ColonEqualS,InstallMethodFun);
 
 mess1 := "objects on left hand side of assignment are not types (use ':=' instead?)";
 
@@ -934,6 +1055,7 @@ installValueFun(args:CodeSequence):Expr := (
 -- 	  else buildErrorPacket(mess1))
 --      else buildErrorPacket(mess1));
 InstallValueFun = installValueFun;
+setup(EqualS,InstallValueFun);
 
 unaryInstallMethodFun(meth:Code,argtype:Code,body:Code):Expr := (
      f := eval(meth);
@@ -948,6 +1070,7 @@ unaryInstallMethodFun(meth:Code,argtype:Code,body:Code):Expr := (
 	       )
 	  else printErrorMessageE(argtype,"expected a hash table")));
 UnaryInstallMethodFun = unaryInstallMethodFun;
+setup(ColonEqualS,UnaryInstallMethodFun);
 
 unaryInstallValueFun(meth:Code,lhs:Code,rhs:Code):Expr := (
      oper := eval(meth);
@@ -979,6 +1102,7 @@ unaryInstallValueFun(meth:Code,lhs:Code,rhs:Code):Expr := (
 --      else printErrorMessageE(argtype,"expected a hash table")
 --      );
 UnaryInstallValueFun = unaryInstallValueFun;
+setup(EqualS,UnaryInstallValueFun);
 
 flatten(a:Sequence):Sequence := (
      -- warning - this function may return its argument without copying
@@ -1038,14 +1162,32 @@ lengthFun(rhs:Code):Expr := (
      e := eval(rhs);
      when e
      is Error do e
-     is x:HashTable do toExpr(x.numEntries)
+     -- # typical value: symbol #, Set, ZZ
+     -- # typical value: symbol #, HashTable, ZZ
+     is x:HashTable do (
+	  if (x.Mutable) then lockRead(x.mutex);
+	  res := toExpr(x.numEntries);
+	  if (x.Mutable) then unlock(x.mutex);
+	  res)
+     -- # typical value: symbol #, Sequence, ZZ
      is x:Sequence do toExpr(length(x))
-     is dc:DictionaryClosure do toExpr(dc.dictionary.symboltable.numEntries)
+     -- # typical value: symbol #, Dictionary, ZZ
+     is dc:DictionaryClosure do (
+	  table := dc.dictionary.symboltable;
+	  lockRead(table.mutex);
+	  res := toExpr(table.numEntries);
+	  unlock(table.mutex);
+	  res)
+     -- # typical value: symbol #, List, ZZ
+     -- # typical value: symbol #, BasicList, ZZ
      is x:List do toExpr(length(x.v))
+     -- # typical value: symbol #, String, ZZ
      is s:stringCell do toExpr(length(s.v))
+     -- # typical value: symbol #, Net, ZZ
      is n:Net do toExpr(length(n.body))
-     else buildErrorPacket("expected a list, sequence, hash table, or string"));
+     else buildErrorPacket("expected a list, sequence, string, net, hash table, or dictionary"));
 setup(SharpS,lengthFun,subvalue);
+
 subvalueQ(lhs:Code,rhs:Code):Expr := (
      left := eval(lhs);
      when left is Error do left
@@ -1056,15 +1198,15 @@ subvalueQ(lhs:Code,rhs:Code):Expr := (
 setup(SharpQuestionS,subvalueQ);
 
 isFinite(e:Expr):Expr := (
-     -- # typical value: isFinite, Number, Boolean
      when e
      is x:ZZcell do True
      is x:QQcell do True
      is x:RRcell do toExpr(isfinite(x.v))
+     is x:RRicell do toExpr(isfinite(x.v))
      is x:CCcell do toExpr(isfinite(x.v))
      else WrongArg("a number")
      );
-setupfun("isFinite",isFinite);
+setupfun("isFinite0",isFinite);
 
 isANumber(e:Expr):Expr := (
      -- # typical value: isANumber, Number, Boolean
@@ -1072,21 +1214,22 @@ isANumber(e:Expr):Expr := (
      is x:ZZcell do True
      is x:QQcell do True
      is x:RRcell do toExpr(!isnan(x.v))
+     is x:RRicell do toExpr(!isnan(x.v))
      is x:CCcell do toExpr(!isnan(x.v))
      else WrongArg("a number")
      );
 setupfun("isANumber",isANumber);
 
 isInfinite(e:Expr):Expr := (
-     -- # typical value: isInfinite, Number, Boolean
      when e
      is x:ZZcell do False
      is x:QQcell do False
      is x:RRcell do toExpr(isinf(x.v))
+     is x:RRicell do toExpr(isinf(x.v))
      is x:CCcell do toExpr(isinf(x.v))
      else WrongArg("a number")
      );
-setupfun("isInfinite",isInfinite);
+setupfun("isInfinite",isInfinite).Protected=false;
 
 gcIsVisible(e:Expr):Expr := (
      Ccode(void, "assert(GC_is_visible(",e,"))");

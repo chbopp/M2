@@ -1,5 +1,9 @@
 --		Copyright 1993-1999 by Daniel R. Grayson
 
+needs "expressions.m2" -- for precedence
+needs "hypertext.m2"
+needs "methods.m2"
+
 peek' = method(TypicalValue => Net)
 
 peek'(ZZ,ZZ) := (depth,n) -> toString n
@@ -7,7 +11,10 @@ peek'(ZZ,Nothing) := (depth,s) -> "null"
 peek'(ZZ,Symbol) := (depth,s) -> toString s
 peek'(ZZ,Thing) := (depth,s) -> net s
 
-peek'(ZZ,BasicList) := (depth,s) -> (
+peek'(ZZ,BasicList)           :=
+peek'(ZZ,Constant)            :=
+peek'(ZZ,InfiniteNumber)      :=
+peek'(ZZ,IndeterminateNumber) := (depth,s) -> (
      if depth === 0 then net s
      else horizontalJoin(
 	  net class s,

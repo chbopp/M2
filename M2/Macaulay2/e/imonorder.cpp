@@ -1,13 +1,25 @@
 // Copyright 2009 Michael E. Stillman
 
 #include "imonorder.hpp"
-#include "overflow.hpp"
+
+#include "engine-includes.hpp"
+
 #ifdef HAVE_ALLOCA_H
-#include <alloca.h>
+#  include <alloca.h>
 #else
-#include <malloc.h>
+#  include <malloc.h>
 #endif
 
+#include "ExponentVector.hpp"
+#include "overflow.hpp"
+
+std::vector<bool> laurentVariables(const MonomialOrder* mo)
+{
+  std::vector<bool> result;
+  for (auto i = 0; i < mo->nvars; ++i)
+    result.push_back(mo->is_laurent[i] == 1);
+  return result;
+}
 /* TODO:
    -- negative exponent versions need to be included (at least for MO_LEX)
    -- non-commutative blocks should be added in
@@ -21,7 +33,7 @@ static void mo_block_revlex(struct mo_block *b, int nvars)
   b->first_exp = 0;  /* will be set later */
   b->first_slot = 0; /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_grevlex(struct mo_block *b, int nvars)
@@ -32,7 +44,7 @@ static void mo_block_grevlex(struct mo_block *b, int nvars)
   b->first_exp = 0;  /* will be set later */
   b->first_slot = 0; /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_grevlex2(struct mo_block *b, int nvars)
@@ -43,7 +55,7 @@ static void mo_block_grevlex2(struct mo_block *b, int nvars)
   b->first_exp = 0;            /* will be set later */
   b->first_slot = 0;           /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_grevlex4(struct mo_block *b, int nvars)
@@ -54,7 +66,7 @@ static void mo_block_grevlex4(struct mo_block *b, int nvars)
   b->first_exp = 0;            /* will be set later */
   b->first_slot = 0;           /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_grevlex_wts(struct mo_block *b, int nvars)
@@ -65,7 +77,7 @@ static void mo_block_grevlex_wts(struct mo_block *b, int nvars)
   b->first_exp = 0;  /* will be set later */
   b->first_slot = 0; /* will be set later */
   b->nweights = nvars;
-  b->weights = 0; /* will be set later */
+  b->weights = nullptr; /* will be set later */
 }
 
 static void mo_block_grevlex2_wts(struct mo_block *b, int nvars)
@@ -76,7 +88,7 @@ static void mo_block_grevlex2_wts(struct mo_block *b, int nvars)
   b->first_exp = 0;            /* will be set later */
   b->first_slot = 0;           /* will be set later */
   b->nweights = nvars;
-  b->weights = 0; /* will be set later */
+  b->weights = nullptr; /* will be set later */
 }
 
 static void mo_block_grevlex4_wts(struct mo_block *b, int nvars)
@@ -87,7 +99,7 @@ static void mo_block_grevlex4_wts(struct mo_block *b, int nvars)
   b->first_exp = 0;            /* will be set later */
   b->first_slot = 0;           /* will be set later */
   b->nweights = nvars;
-  b->weights = 0; /* will be set later */
+  b->weights = nullptr; /* will be set later */
 }
 
 static void mo_block_lex(struct mo_block *b, int nvars)
@@ -98,7 +110,7 @@ static void mo_block_lex(struct mo_block *b, int nvars)
   b->first_exp = 0;  /* will be set later */
   b->first_slot = 0; /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_lex2(struct mo_block *b, int nvars)
@@ -109,7 +121,7 @@ static void mo_block_lex2(struct mo_block *b, int nvars)
   b->first_exp = 0;            /* will be set later */
   b->first_slot = 0;           /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_lex4(struct mo_block *b, int nvars)
@@ -120,7 +132,7 @@ static void mo_block_lex4(struct mo_block *b, int nvars)
   b->first_exp = 0;            /* will be set later */
   b->first_slot = 0;           /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_group_lex(struct mo_block *b, int nvars)
@@ -131,7 +143,7 @@ static void mo_block_group_lex(struct mo_block *b, int nvars)
   b->first_exp = 0;  /* will be set later */
   b->first_slot = 0; /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_group_revlex(struct mo_block *b, int nvars)
@@ -142,7 +154,7 @@ static void mo_block_group_revlex(struct mo_block *b, int nvars)
   b->first_exp = 0;  /* will be set later */
   b->first_slot = 0; /* will be set later */
   b->nweights = 0;
-  b->weights = 0;
+  b->weights = nullptr;
 }
 
 static void mo_block_wt_function(struct mo_block *b, int nvars, deg_t *wts)
@@ -160,7 +172,7 @@ MonomialOrder *monomialOrderMake(const MonomialOrdering *mo)
 {
   MonomialOrder *result;
   int i, j, nv, this_block;
-  deg_t *wts = NULL;
+  deg_t *wts = nullptr;
   /* Determine the number of variables, the number of blocks, and the location
      of the component */
   int nblocks = 0;
@@ -197,7 +209,7 @@ MonomialOrder *monomialOrderMake(const MonomialOrdering *mo)
       struct mon_part_rec_ *t = mo->array[i];
       if (t->type != MO_WEIGHTS)
         {
-          if (t->wts == 0)
+          if (t->wts == nullptr)
             for (j = 0; j < t->nvars; j++) result->degs[nvars++] = 1;
           else
             for (j = 0; j < t->nvars; j++) result->degs[nvars++] = t->wts[j];
@@ -401,7 +413,7 @@ void monomialOrderEncodeFromActualExponents(const MonomialOrder *mo,
                                             monomial result_psums)
 /* Given 'expon', compute the encoded partial sums value */
 {
-  if (mo == 0) return;
+  if (mo == nullptr) return;
   int *tmpexp = static_cast<int *>(alloca((mo->nvars + 1) * sizeof(int)));
   int i, j, nvars, s;
   int *p1;
@@ -535,9 +547,9 @@ void monomialOrderEncodeFromActualExponents(const MonomialOrder *mo,
 
 void monomialOrderDecodeToActualExponents(const MonomialOrder *mo,
                                           const_monomial psums,
-                                          exponents expon)
+                                          exponents_t expon)
 {
-  if (mo == 0) return;
+  if (mo == nullptr) return;
   int *tmpexp = static_cast<int *>(alloca((mo->nvars + 1) * sizeof(int)));
   int i, j, nvars;
   deg_t *degs = mo->degs;

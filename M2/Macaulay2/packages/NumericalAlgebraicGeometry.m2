@@ -1,19 +1,22 @@
 -- -*- coding: utf-8 -*-
 -- licensed under GPL v2 or any later version
 
-newPackage select((
+newPackage(
      "NumericalAlgebraicGeometry",
-     Version => "1.11",
-     Date => "Nov 2017",
-     Headline => "Numerical Algebraic Geometry",
+     Version => "1.24",
+     Date => "May 2024",
+     Headline => "numerical algebraic geometry",
      HomePage => "http://people.math.gatech.edu/~aleykin3/NAG4M2",
      AuxiliaryFiles => true,
      Authors => {
-	  {Name => "Anton Leykin", Email => "leykin@math.gatech.edu"},
+	  {Name => "Anton Leykin", Email => "leykin@math.gatech.edu", HomePage => "https://people.math.gatech.edu/~aleykin3"},
 	  {Name => "Robert Krone", Email => "krone@math.gatech.edu"}
 	  },
+     Keywords => {"Numerical Algebraic Geometry"},
      Configuration => { "PHCPACK" => "phc",  "BERTINI" => "bertini", "HOM4PS2" => "hom4ps2" },	
-     PackageExports => {"NAGtypes","NumericalHilbert","SLPexpressions"},
+     PackageExports => {"NAGtypes",
+	 "NumericalLinearAlgebra",
+	 "SLPexpressions"},
      PackageImports => {"PHCpack","Bertini"},
      -- DebuggingMode should be true while developing a package, 
      --   but false after it is done
@@ -21,18 +24,19 @@ newPackage select((
      DebuggingMode => false,
      Certification => {
 	  "journal name" => "The Journal of Software for Algebra and Geometry: Macaulay2",
-	  "journal URI" => "http://j-sag.org/",
+	  "journal URI" => "https://msp.org/jsag/",
 	  "article title" => "Numerical Algebraic Geometry",
 	  "acceptance date" => "2011-05-20",
-	  "published article URI" => "http://j-sag.org/Volume3/jsag-2-2011.pdf",
-	  "published code URI" => "http://j-sag.org/Volume3/NumericalAlgebraicGeometry.tar",
-	  "repository code URI" => "svn://svn.macaulay2.com/Macaulay2/trunk/M2/Macaulay2/packages/NumericalAlgebraicGeometry.m2",
-	  "release at publication" => 13254,	    -- as an integer
+	  "published article URI" => "https://msp.org/jsag/2011/3-1/p02.xhtml",
+	  "published article DOI" => "10.2140/jsag.2011.3.5",
+	  "published code URI" => "https://msp.org/jsag/2011/3-1/jsag-v3-n1-x02-code.zip",
+	  "repository code URI" => "https://github.com/Macaulay2/M2/blob/master/M2/Macaulay2/packages/NumericalAlgebraicGeometry.m2",
+	  "release at publication" => "c3a7ec33ee30195c2a8a15eef3456b2f27d73bf3",
 	  "version at publication" => "1.4",
 	  "volume number" => "3",
-	  "volume URI" => "http://j-sag.org/Volume3/"
+	  "volume URI" => "https://msp.org/jsag/2011/3-1/"
 	  }
-     ), x -> x =!= null)
+    )
 
 -- Any symbols or functions that the user is to have access to
 -- must be placed in one of the following two lists
@@ -48,7 +52,8 @@ export {
      "gamma","tDegree","tStep","tStepMin","stepIncreaseFactor","numberSuccessesBeforeIncrease",
      "Predictor","RungeKutta4","Multistep","Tangent","Euler","Secant","MultistepDegree","Certified",
      "EndZoneFactor", "maxCorrSteps", "InfinityThreshold", 
-     "Normalize", "Projectivize",
+     -- "Normalize", -- exported by NumericalLA 
+     "Projectivize",
      "AffinePatches", "DynamicPatch",
      "SLP", "HornerForm", "CompiledHornerForm", "CorrectorTolerance", "SLPcorrector", "SLPpredictor",
      "NoOutput",
@@ -70,10 +75,21 @@ protect Tracker -- an internal key in Point
 protect LastIncrement;
 
 -- possible solution statuses returned by engine
-solutionStatusLIST = {Undetermined, Processing, Regular, Singular, Infinity, MinStepFailure, Origin, IncreasePrecision, DecreasePrecision, RefinementFailure}
+solutionStatusLIST = {
+    Undetermined, 
+    Processing, 
+    Regular, 
+    Singular, 
+    Infinity, 
+    MinStepFailure, 
+    Origin, 
+    IncreasePrecision, 
+    DecreasePrecision, 
+    RefinementFailure
+    }
 
 -- experimental:
-protect LanguageCPP, protect MacOsX, protect System, 
+protect LanguageCPP, protect MacOsX, -- protect System, 
 protect LanguageC, protect Linux, protect Language
 protect maxNumberOfVariables
 protect maxPrecision
@@ -177,7 +193,7 @@ setDefault = method(Options => {
      Attempts => null, -- max number of attempts (e.g., to find a regular path)
      Tolerance => null,
      SingularConditionNumber => null,
-     Precision => null,
+     Precision => null
      })
 installMethod(setDefault, o -> () -> scan(keys o, k->if o#k=!=null then DEFAULT#k=o#k))
 getDefault = method()
@@ -194,7 +210,7 @@ getDefault Symbol := (s)->DEFAULT#s
 -- Solutions are lists {s, a, b, c, ...} where s is list of coordinates (in CC)
 -- and a,b,c,... contain extra information, e.g, SolutionStatus=>Regular indicates the solution is regular.
 -- NEW FORMAT:
--- Solutions are of type Point (defined in NAGtypes).
+-- Solutions are of a type derived from AbstractPoint (defined in NAGtypes), e.g. Point.
  
 -- M2 tracker ----------------------------------------
 integratePoly = method(TypicalValue => RingElement)
@@ -243,10 +259,10 @@ multistepPredictor (QQ,List) := List => memoize((c,s) -> (
 
 multistepPredictorLooseEnd = method(TypicalValue => List)
 multistepPredictorLooseEnd (QQ,List) := List => memoize((c,s) -> (
--- coefficients for a multistep predictor with intederminate last step
+-- coefficients for a multistep predictor with indeterminate last step
 -- IN:  c = step adjustment coefficient (in QQ)
 --      s = list of step adjustments (from the initial stepsize h = t_1-t_0)
--- OUT: b = list of polinomials in QQ[a], where a=(last step size)/(next to last stepsize)   
+-- OUT: b = list of polynomials in QQ[a], where a=(last step size)/(next to last stepsize)   
      t := symbol t;
      n := #s + 2; -- t_n is the one for which prediction is being made
      a := symbol a;
@@ -318,7 +334,7 @@ parameterHomotopy (List, List, List) := o -> (F, P, T) -> (
     else error "not implemented"
     )
 
-{* not used???
+-* not used???
 homogenizeSystem = method(TypicalValue => List)
 homogenizeSystem List := List => T -> (
      R := commonRing T;
@@ -332,7 +348,7 @@ dehomogenizeSystem List := List => T -> (
      R := (coefficientRing Rh)[drop(gens Rh,-1)]; 
      apply(T, f -> (map(R,Rh,vars R | matrix{{1_R}})) f)
      )
-*}
+*-
 
 randomGaussian = method()
 randomGaussian := () -> sum(12, i->random 1.0) - 6;
@@ -361,7 +377,7 @@ randomDiagonalUnitaryMatrix ZZ := n -> diagonalMatrix apply(n, i->exp(ii*random(
 randomUnitaryMatrix = method()
 randomUnitaryMatrix ZZ := n -> (
      Ml := flatten entries randomInComplexUnitBall(n^2);
-     M := map(CC^n, n, (i,j)->Ml#(n*i+j)); -- n+1 by n+1 matrix                         
+     M := map(CC^n, n, (i,j)->Ml#(n*i+j)); -- n by n matrix                         
      randomDiagonalUnitaryMatrix n * (last SVD M) 
      )
 
@@ -373,27 +389,8 @@ randomOrthonormalCols = method() -- return a random m-by-n matrix with orthonorm
 randomOrthonormalCols(ZZ,ZZ) := (m,n) -> 
 if m<n or n<1 then error "wrong input" else (randomUnitaryMatrix m)_(toList(0..n-1))
 
-squareUp = method() -- squares up a polynomial system (presented as a one-column matrix)
-squareUp PolySystem := P -> if P.?SquaredUpSystem then P.SquaredUpSystem else(
-    n := P.NumberOfVariables;
-    m := P.NumberOfPolys;
-    if m<=n then "overdetermined system expected";
-    C := coefficientRing ring P;
-    M := if class C === ComplexField then sub(randomOrthonormalRows(n,m), C) else random(C^n,C^m);
-    squareUp(P,M)
-    )
-squareUp(PolySystem,Matrix) := (P,M) -> (
-    P.SquareUpMatrix = M;
-    P.SquaredUpSystem = polySystem (sub(M,ring P)*P.PolyMap) -- should work without sub!!!
-    )
 
-squareUpMatrix = method()
-squareUpMatrix PolySystem := P -> if P.?SquareUpMatrix then P.SquareUpMatrix else (
-    n := P.NumberOfVariables;
-    C := coefficientRing ring P;
-    map(C^n)
-    ) 
-
+load "./NumericalAlgebraicGeometry/systems.m2"
 load "./NumericalAlgebraicGeometry/BSS-certified.m2"
 load "./NumericalAlgebraicGeometry/0-dim-methods.m2"
 load "./NumericalAlgebraicGeometry/witness-set.m2"
@@ -403,8 +400,6 @@ load "./NumericalAlgebraicGeometry/decomposition.m2"
 load "./NumericalAlgebraicGeometry/positive-dim-methods.m2"
 load "./NumericalAlgebraicGeometry/deflation.m2"
 load "./NumericalAlgebraicGeometry/SLP.m2"
-load "./NumericalAlgebraicGeometry/npd.m2"
-load "./NumericalAlgebraicGeometry/polynomial-space.m2"
 
 load "./NumericalAlgebraicGeometry/WSet-deflation.m2"
 
@@ -416,7 +411,7 @@ makeHom4psInput (Ring, List) := (R, T) -> (
 --      T = polynomials of target system (in R)
 -- OUT: (name, perm), where
 --      name = input filename   
---      perm = hashtable of order of appearences of variables in the input
+--      perm = hashtable of order of appearances of variables in the input
   filename := temporaryFileName() | "input"; 
   s := "{\n";
   scan(T, p -> s = s | replace("ii", "I", toString p) | ";\n");
@@ -481,9 +476,6 @@ selectUnique List := o -> sols ->(
 NAGtrace = method()
 NAGtrace ZZ := l -> (numericalAlgebraicGeometryTrace=l; oldDBG:=DBG; DBG=l; oldDBG);
 
--- conjugate all entries of the matrix (should be a part of M2!!!)
-conjugate Matrix := M -> matrix(entries M / (row->row/conjugate))
- 
 -- normalized condition number of F at x
 conditionNumber = method()
 conditionNumber Matrix := M -> (s := first SVD M; if min s == 0 then infinity else max s / min s)
@@ -497,7 +489,7 @@ conditionNumber (List,List) := (F,x) -> (
      )
 
 isSolution = method(Options=>{Tolerance=>null})
-isSolution(Point,PolySystem) := o -> (P,F) -> (
+isSolution(AbstractPoint,PolySystem) := o -> (P,F) -> (
     o = fillInDefaultOptions o;
     -- P = newton(F,P); -- !!! change for non regular
     -- P.ErrorBoundEstimate < o.Tolerance
@@ -508,11 +500,12 @@ beginDocumentation()
 
 load "./NumericalAlgebraicGeometry/doc.m2";
 
+-*
 undocumented {
     Field, 
-    GateParameterHomotopy, parametricSegmentHomotopy, (parametricSegmentHomotopy,GateMatrix,List,List), (parametricSegmentHomotopy,PolySystem), 
+    GateParameterHomotopy, 
     GateHomotopy, trackHomotopy, (trackHomotopy,Thing,List), endGameCauchy, (endGameCauchy,GateHomotopy,Number,MutableMatrix), 
-    (endGameCauchy,GateHomotopy,Number,Point),
+    (endGameCauchy,GateHomotopy,Number,AbstractPoint),
     (evaluateH,GateHomotopy,Matrix,Number),
 (evaluateH,GateParameterHomotopy,Matrix,Matrix,Number),
 (evaluateHt,GateHomotopy,Matrix,Number),
@@ -522,6 +515,7 @@ undocumented {
 (specialize,GateParameterHomotopy,MutableMatrix),
 [trackHomotopy,Software],
     }
+*-
 
 TEST ///
 load concatenate(NumericalAlgebraicGeometry#"source directory","./NumericalAlgebraicGeometry/TST/SoftwareM2.tst.m2")
@@ -535,6 +529,17 @@ load concatenate(NumericalAlgebraicGeometry#"source directory","./NumericalAlgeb
 
 load concatenate(NumericalAlgebraicGeometry#"source directory","./NumericalAlgebraicGeometry/TST/simple-tests.tst.m2")
 load concatenate(NumericalAlgebraicGeometry#"source directory","./NumericalAlgebraicGeometry/TST/border-case-errors.m2")
+
+
+TEST ///
+if Bertini.Options.OptionalComponentsPresent then
+load concatenate(NumericalAlgebraicGeometry#"source directory","./NumericalAlgebraicGeometry/Bertini/Bertini.test.m2")
+///
+
+TEST ///
+if PHCpack.Options.OptionalComponentsPresent then
+load concatenate(NumericalAlgebraicGeometry#"source directory","./NumericalAlgebraicGeometry/PHCpack/PHCpack.test.m2")
+///
 end
 
 -- Here place M2 code that you find useful while developing this
@@ -547,14 +552,15 @@ installPackage "NumericalAlgebraicGeometry"
 installPackage ("NumericalAlgebraicGeometry",RerunExamples=>true, RemakeAllDocumentation=>true)
 installPackage ("NumericalAlgebraicGeometry",RerunExamples=>false, RemakeAllDocumentation=>true)
 
--- (old way) installPackage("NumericalAlgebraicGeometry", SeparateExec=>true, AbsoluteLinks=>false)
+-- (old way) installPackage("NumericalAlgebraicGeometry", SeparateExec=>true)
 
 -- install docs with no absolute links
 uninstallPackage "Style"
-installPackage("Style", AbsoluteLinks=>false)
-installPackage("NumericalAlgebraicGeometry", AbsoluteLinks=>false)
+installPackage("Style")
+installPackage("NumericalAlgebraicGeometry")
 
 installPackage ("NumericalAlgebraicGeometry", MakeDocumentation=>false)
+restart
 check "NumericalAlgebraicGeometry"
 
 -- Local Variables:

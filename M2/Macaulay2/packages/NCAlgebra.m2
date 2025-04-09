@@ -1,5 +1,5 @@
 newPackage("NCAlgebra",
-     Headline => "Data types for Noncommutative algebras",
+     Headline => "data types for noncommutative algebras",
      Version => "1.0",
      Date => "July 2, 2016",
      Authors => {
@@ -12,8 +12,11 @@ newPackage("NCAlgebra",
 	  {Name => "Courtney Gibbons",
 	   HomePage => "http://people.hamilton.edu/cgibbons/index.html",
 	   Email => "crgibbon@hamilton.edu"}},
+     Keywords => {"Noncommutative Algebra", "Interfaces"},
      AuxiliaryFiles => true,
-     CacheExampleOutput =>true
+     CacheExampleOutput => true,
+     PackageExports =>{"IntegralClosure"},
+     OptionalComponentsPresent => bergmanPresent := run "type bergman >/dev/null 2>&1" === 0
      )
 
 export { "NCRing", "NCQuotientRing", "NCPolynomialRing",
@@ -1153,7 +1156,7 @@ sparseCoeffs List := opts -> L -> (
 	coeffs = coeffs | newCoeffs;);
      ); 
   map(R^m , R^l, coeffs)
-{*  d := if all(L, m -> m == 0) then 0 else L#(position(L,m->m!=0));
+-*  d := if all(L, m -> m == 0) then 0 else L#(position(L,m->m!=0));
   if not all(L, m-> (isHomogeneous(m) and (m == 0 or (degree m)==(degree d)))) then 
 	error "Expected homogeneous elements of the same degree.";
   B := (L#0).ring;
@@ -1181,7 +1184,7 @@ sparseCoeffs List := opts -> L -> (
        
 	coeffs = coeffs | newCoeffs;);
      ); 
-   map(R^m , R^l, coeffs)*}
+   map(R^m , R^l, coeffs)*-
 )
 
 monomials NCRingElement := opts -> f -> (
@@ -1282,7 +1285,7 @@ toNCRing Ring := R -> (
    isComm := isCommutative R;
    isExter := isExterior R;
    if not isComm and not isExter then error "Input ring must be either strictly (-1)-skew commutative or commutative.";
-   --- generate the (skew)commutivity relations
+   --- generate the (skew)commutativity relations
    Q := coefficientRing R;
    A := Q (gens R);
    phi := ncMap(A,ambient R,gens A);
@@ -1345,7 +1348,7 @@ getMinMaxDegrees = gensList -> (
 
 runCommand = cmd -> (
    --- comment this line out eventually, or add a verbosity option
-   stderr << "--running: " << cmd << " ... " << flush;
+   -- stderr << "--running: " << cmd << " ... " << flush;
    r := run cmd;
    if r != 0 then (
       << "Failed!" << endl;
@@ -1407,7 +1410,7 @@ writeBergmanInputFile (NCRing,String,String) := opts -> (B,genListString,tempInp
       -- if we don't want to recompute the GB, we need to tell Bergman that there are no
       -- Spairs to work on for twice the max degree of the gens we send it so it
       -- doesn't try to create any more Spairs.
-      fil << "(load (mkbmpathexpand \"$bmload/lap/clisp/unix/hseries.fas\"))" << endl;
+      fil << "(load (mkbmpathexpand \"$bmload/hseries.fas\"))" << endl;
       fil << "(setinterruptstrategy minhilblimits)" << endl;
       fil << "(setinterruptstrategy minhilblimits)" << endl;
       fil << "(sethseriesminima" << concatenate(opts#DegreeLimit:" skipcdeg") << ")" << endl;
@@ -1528,7 +1531,7 @@ twoSidedNCGroebnerBasisBergman NCIdeal := opts -> I -> (
                         NumModuleVars=>opts#NumModuleVars);
   writeGBInitFile(tempInit,tempInput,tempOutput);
   stderr << "--Calling Bergman for NCGB calculation." << endl;
-  runCommand("bergman -i " | tempInit | " -on-error exit --silent > " | tempTerminal);
+  runCommand("bergman -on-error exit --silent < " | tempInit | " > " | tempTerminal);
   retVal := gbFromOutputFile(ring I,
                              tempOutput,
                              MakeMonic=>opts#MakeMonic,
@@ -1645,7 +1648,7 @@ normalFormBergman (List, NCGroebnerBasis) := opts -> (fList, ncgb) -> (
    << "Writing bergman init file." << endl;
    writeNFInitFile(tempInit,tempGBInput,tempNFInput,tempOutput);
    stderr << "--Calling Bergman for NF calculation for " << #nonConstantIndices << " elements." << endl;
-   runCommand("bergman -i " | tempInit | " -on-error exit --silent > " | tempTerminal);
+   runCommand("bergman -on-error exit --silent < " | tempInit | " > " | tempTerminal);
    -- these are now the nfs of the nonzero entries.  Need to splice back in
    -- the zeros where they were.
    nfList := nfFromTerminalFile(A,tempTerminal);
@@ -1669,7 +1672,7 @@ writeHSInitFile := (tempInit,
 		    tempPBOutput,
 		    tempHSOutput) -> (
    fil := openOut tempInit;
-   fil << "(setf (getenv \"bmload\") (mkbmpathexpand \"$bmload/lap/clisp/unix\"))" << endl;
+   fil << "(setf (getenv \"bmload\") (mkbmpathexpand \"$bmload\"))" << endl;
    fil << "(ncpbhgroebner " 
        << "\"" << tempInput << "\" "
        << "\"" << tempGBOutput << "\" "
@@ -1717,7 +1720,7 @@ hilbertBergman NCQuotientRing := opts -> B -> (
 			DegreeLimit=>opts#DegreeLimit);
   writeHSInitFile(tempInit,tempInput,tempGBOutput,tempPBOutput,tempHSOutput);
   stderr << "--Calling bergman for HS computation." << endl;
-  runCommand("bergman -i " | tempInit | " -on-error exit --silent > " | tempTerminal);
+  runCommand("bergman -on-error exit --silent < " | tempInit | " > " | tempTerminal);
   I.cache#gb = gbFromOutputFile(ring I,tempGBOutput);
   hsFromOutputFiles(B,tempHSOutput,tempTerminal)
 )
@@ -1999,10 +2002,8 @@ newBasis(ZZ,NCRing) := NCMatrix => opts -> (n,B) -> (
       ncMatrix(B,{},{})
 )
 
-{*
-TEST ///
-restart
-debug needsPackage "NCAlgebra"
+if bergmanPresent then TEST ///
+debug NCAlgebra						   -- to get "newBasis"
 A = QQ{a,b,c,d}
 setWeights(A,{1,1,2,3})
 time b1 = flatten entries basis(8,A);
@@ -2012,7 +2013,6 @@ setWeights(B,{1,1,2,3})
 time b1 = flatten entries basis(15,B);
 time b2 = flatten entries newBasis(15,B);
 ///
-*}
 
 leftMultiplicationMap = method()
 leftMultiplicationMap(NCRingElement,ZZ) := (f,n) -> (
@@ -2053,10 +2053,7 @@ leftMultiplicationMap(NCRingElement,List,List) := (f,fromBasis,toBasis) -> (
    )
 )
 
-{*
-TEST ///
-restart
-needsPackage "NCAlgebra"
+if bergmanPresent then TEST ///
 A = QQ{a,b}
 I = ncIdeal {a*a*a,a*a*b,a*b*a,a*b*b,b*a*a,b*a*b,b*b*a,b*b*b}
 B = A/I
@@ -2068,7 +2065,6 @@ leftMultiplicationMap(a,-1,0)
 leftMultiplicationMap(a,-1,0)
 leftMultiplicationMap(a,-1,0)
 ///
-*}
 
 rightMultiplicationMap = method()
 rightMultiplicationMap(NCRingElement,ZZ) := (f,n) -> (
@@ -3186,8 +3182,8 @@ assignDegrees (NCMatrix, List, List) := (M,targetDeg,sourceDeg) -> (
    -- this means an input matrix may not have "source" and "target" keys
    -- but it will if it's a map to the zero module
    if (#(targetDeg) != #(entries M)) then error "Target degree list does not match number of rows of matrix";
-   if #(entries M) !=0 and (#(sourceDeg) != #(first entries M)) then error "Source degree list does not match number of columns of matriix";   
-   if #(entries M) == 0 and (#(sourceDeg) != #(M.source)) then error "Source degree list does not match number of columns of matriix";
+   if #(entries M) !=0 and (#(sourceDeg) != #(first entries M)) then error "Source degree list does not match number of columns of matrix";   
+   if #(entries M) == 0 and (#(sourceDeg) != #(M.source)) then error "Source degree list does not match number of columns of matrix";
    M#(symbol source) = sourceDeg;
    M#(symbol target) = targetDeg;
    -- set the isHomogeneous flag.
@@ -3385,7 +3381,7 @@ NCMatrix _ ZZ := (M,d) -> (
    matrix multTable
 )
 
-Hom (ZZ,NCMatrix,NCMatrix) := (d,M,N) -> (
+Hom (ZZ,NCMatrix,NCMatrix) := opts -> (d,M,N) -> (
    -- This method uses Boehm's Algorithm 6.5.1 from "Computer Algebra: Lecture Notes" 
    -- http://www.mathematik.uni-kl.de/~boehm/lehre/1213_CA/ca.pdf
    --

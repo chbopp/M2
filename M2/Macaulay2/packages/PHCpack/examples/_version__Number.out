@@ -1,17 +1,15 @@
--- -*- M2-comint -*- {* hash: -211311793 *}
--- COMPILE TIME: Oct  7 2016, 07:56:28
---loading configuration for package "PHCpack" from file /Users/leykin/Library/Application Support/Macaulay2/init-PHCpack.m2
+-- -*- M2-comint -*- hash: 8946122813830832975
 
 i1 : v = versionNumber(null)
 
-o1 = (2.4.27, 2016-10-16)
+o1 = (2.4.90, 2024-03-20)
 
 o1 : Sequence
 
 i2 : print v_0
-2.4.27
+2.4.90
 
 i3 : print v_1
-2016-10-16
+2024-03-20
 
 i4 : 

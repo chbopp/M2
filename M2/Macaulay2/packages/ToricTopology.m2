@@ -27,7 +27,9 @@ newPackage(
     		{Name => "Alvise Trevisan", Email => "a.trevisan@enpicom.com", HomePage => "http://www.enpicom.com"},
     		{Name => "Alexander I. Suciu", Email => "a.suciu@neu.edu"}
 		},  
-    	Headline => "Toric topology"
+        Keywords => {"Toric Geometry"},
+     	PackageImports => { "SimplicialComplexes" },
+    	Headline => "toric topology"
     	)
 
 protect QTMSimplicialComplex
@@ -44,8 +46,6 @@ export{
 	"realProjectiveSpace", "hessenbergVariety", "complexProjectiveSpace",
 	"QTMSimplicialComplex", "QTMCharacteristicMatrix", "QTMDimension"
 }
-
-needsPackage "SimplicialComplexes"
 
 -- type definitions --
 SmallCover = new Type of HashTable
@@ -219,7 +219,7 @@ projectiveSpace = (n, base) -> (
 
 listMinors = (sc,chi) -> (
 	listminors:={};
-	for mon in (entries(facets(sc)))_0 do (
+	for mon in facets(sc) do (
 		listminors=append(listminors,determinant(submatrix(chi,indices(mon))));
 	);
 	listminors
@@ -231,7 +231,7 @@ subComplex = (sc, V) -> (
 			scan(drop(V,1),i->mV=mV*sub(varlist_(i-1),ring(sc)));
 			candidates := {};
 			for k in (0..(length V)) do (
-				candidates = join(candidates,(entries(faces(k,sc)))_0);
+				candidates = join(candidates, faces(k,sc));
 			);       
 			k:=0;    
 			lis := {};         

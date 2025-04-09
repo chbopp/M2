@@ -3,22 +3,23 @@
 #ifndef _aring_zz_gmp_hpp_
 #define _aring_zz_gmp_hpp_
 
+#include "interface/gmp-util.h"  // for mpz_reallocate_limbs
+#include "interface/random.h"    // for rawRandomInteger
+
 #include "aring.hpp"
 #include "buffer.hpp"
 #include "ringelem.hpp"
-#include <iosfwd>
 #include "exceptions.hpp"
-#include "rand.h"
 #include "ZZ.hpp"
 
 namespace M2 {
 /**
    @ingroup rings
 
-   @brief wrapper for the flint fmpz_t integer representation
+   @brief wrapper for the mpz_struct integer representation
 */
 
-class ARingZZGMP : public RingInterface
+class ARingZZGMP : public SimpleARing<ARingZZGMP>
 {
  public:
   static const RingID ringID = ring_ZZ;
@@ -74,7 +75,8 @@ class ARingZZGMP : public RingInterface
   }
 
   void init(ElementType& result) const { mpz_init(&result); }
-  void clear(ElementType& result) const { mpz_clear(&result); }
+  static void clear(ElementType& result) { mpz_clear(&result); }
+
   void set(ElementType& result, const ElementType& a) const
   {
     mpz_set(&result, &a);
@@ -86,13 +88,13 @@ class ARingZZGMP : public RingInterface
     mpz_set_si(&result, a);
   }
 
-  void set_from_mpz(ElementType& result, const mpz_ptr a) const
+  void set_from_mpz(ElementType& result, mpz_srcptr a) const
   {
     // printf("ARingZZ::calling set_from_mpz\n");
     mpz_set(&result, a);
   }
 
-  bool set_from_mpq(ElementType& result, const mpq_ptr a) const
+  bool set_from_mpq(ElementType& result, mpq_srcptr a) const
   {
     if (mpz_cmp_si(mpq_denref(a), 1) == 0)
       {
@@ -149,30 +151,32 @@ class ARingZZGMP : public RingInterface
     mpz_mul(&result, &a, &b);
   }
 
-  ///@brief test doc
-  bool divide(ElementType& result,
+  ///@brief exact division of integers.
+
+  void divide(ElementType& result,
               const ElementType& a,
               const ElementType& b) const
   {
     if (mpz_divisible_p(&a, &b))
       {
         mpz_divexact(&result, &a, &b);
-        return true;
       }
     else
-      return false;
+      {
+        throw exc::engine_error("division not exact");
+      }
   }
 
   void power(ElementType& result, const ElementType& a, unsigned long n) const
   {
-    assert(n >= 0);
     return mpz_pow_ui(&result, &a, n);
   }
 
   void power_mpz(ElementType& result,
                  const ElementType& a,
-                 const mpz_ptr n) const
+                 mpz_srcptr n) const
   {
+    if (mpz_sgn(n) < 0) throw exc::engine_error("can only raise to a nonnegative power");
     std::pair<bool, int> n1 = RingZZ::get_si(n);
     if (n1.first)
       mpz_pow_ui(&result, &a, n1.second);
@@ -192,7 +196,7 @@ class ARingZZGMP : public RingInterface
   void random(ElementType& result) const
   {
     // TODO: this leaks a gmp_ZZ
-    mpz_set(&result, rawRandomInteger(0));
+    mpz_set(&result, rawRandomInteger(nullptr));
   }
   /** @} */
 
@@ -215,14 +219,19 @@ class ARingZZGMP : public RingInterface
     mpz_ptr b = getmemstructtype(mpz_ptr);
     mpz_init(b);
     mpz_set(b, &a);
-    result.poly_val = reinterpret_cast<Nterm*>(b);
+    mpz_reallocate_limbs(b);
+    result = ring_elem(b);
   }
 
   void from_ring_elem(ElementType& result, const ring_elem& a) const
   {
-    ElementType* t =
-        reinterpret_cast<ElementType*>(const_cast<Nterm*>(a.poly_val));
+    const ElementType* t = a.get_mpz();
     mpz_set(&result, t);
+  }
+
+  const ElementType& from_ring_elem_const(const ring_elem& a) const
+  {
+    return *a.get_mpz();
   }
 
   /** @} */

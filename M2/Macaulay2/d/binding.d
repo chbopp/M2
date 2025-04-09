@@ -35,28 +35,28 @@ enlarge(table:SymbolHashTable):void := (
      );
 
 -- warning: these routines have similar code
--- thread safe because it replaces bucket with new bucket so no double counting
+-- old comment: thread safe because it replaces bucket with new bucket so no double counting
 export insert(entry:Symbol,table:SymbolHashTable):Symbol := (
-     lock(table.mutex);
+     lockWrite(table.mutex);
      table.numEntries = table.numEntries + 1;
      if 3 * table.numEntries > 2 * length(table.buckets) + 1
      then enlarge(table);
      h := entry.word.hash & (length(table.buckets)-1);
      table.buckets.h = SymbolListCell(entry.word,entry,table.buckets.h);
-     compilerBarrier();
+     -- compilerBarrier();
      unlock(table.mutex);
      entry);
 
--- thread safe because it replaces bucket with new bucket so no double counting
+-- old comment: thread safe because it replaces bucket with new bucket so no double counting
 export insert(table:SymbolHashTable, newname:Word, entry:Symbol):Symbol := ( -- warning -- unsafe -- check that the dictionary of the symbol is the same as this dictionary
-     lock(table.mutex);
+     lockWrite(table.mutex);
      table.numEntries = table.numEntries + 1;
      if 3 * table.numEntries > 2 * length(table.buckets) + 1
      then enlarge(table);
      h := newname.hash & (length(table.buckets)-1);
      table.buckets.h = SymbolListCell(newname,entry,table.buckets.h);
      unlock(table.mutex);
-     compilerBarrier();
+     -- compilerBarrier();
      entry);
 
 --Error flag for parsing; should be thread local because may have multiple threads parsing at once
@@ -84,8 +84,8 @@ export makeEntry(word:Word,position:Position,dictionary:Dictionary,thread:bool,l
 
 	  if thread then (
 	       -- threadFrame grows whenever an assignment occurs, if needed, so we don't enlarge it now
-	       frameindex = threadFramesize;
-	       threadFramesize = threadFramesize + 1;
+	       frameindex = load(threadFramesize);
+	       fetch_add(threadFramesize, 1);
 	       )
 	  else (
 	       -- this allows the global frame to grow
@@ -124,7 +124,7 @@ export makeEntry(word:Word,position:Position,dictionary:Dictionary):Symbol := (
      makeEntry(word,position,dictionary,false,false));
 export makeSymbol(word:Word,position:Position,dictionary:Dictionary,thread:bool,locallyCreated:bool):Symbol := (
      entry := makeEntry(word,position,dictionary,thread,locallyCreated);
-     if dictionary.frameID == 0 && isalnum(word.name) && !thread
+     if dictionary.frameID == 0 && isvalidsymbol(word.name) && !thread
      then globalFrame.values.(entry.frameindex) = Expr(SymbolClosure(globalFrame,entry));
      entry);
 export makeSymbol(word:Word,position:Position,dictionary:Dictionary,thread:bool):Symbol := (
@@ -145,7 +145,6 @@ makeKeyword(w:Word):SymbolClosure := (
      globalFrame.values.(entry.frameindex) = Expr(sc);
      sc);
 export makeProtectedSymbolClosure(s:string):SymbolClosure := makeProtectedSymbolClosure(makeUniqueWord(s,parseWORD));
-makeKeyword(s:string):SymbolClosure := makeKeyword(makeUniqueWord(s,parseWORD));
 -----------------------------------------------------------------------------
 --Counter used for initializing precedence of different things in the parser
 prec := 0;
@@ -154,15 +153,11 @@ bumpPrecedence():void := prec = prec + 2;
 
 -- helper functions for setting up words with various methods for parsing them
 parseWORD.funs                 = parsefuns(defaultunary, defaultbinary);
-unary(s:string)         :Word := install(s,makeUniqueWord(s, parseinfo(prec,nopr  ,prec,parsefuns(unaryop   ,defaultbinary))));
 unaryword(s:string)     :Word :=           makeUniqueWord(s, parseinfo(prec,nopr  ,prec,parsefuns(unaryop   ,defaultbinary)));
-biunary(s:string)       :Word := install(s,makeUniqueWord(s, parseinfo(prec,nopr  ,prec,parsefuns(unaryop   ,postfixop))));
 postfix(s:string)       :Word := install(s,makeUniqueWord(s, parseinfo(prec,nopr  ,nopr,parsefuns(errorunary,postfixop))));
 unarybinaryleft(s:string)     :Word := install(s,makeUniqueWord(s, parseinfo(prec,prec  ,prec,parsefuns(unaryop   ,binaryop))));
 unarybinaryright(s:string)    :Word := install(s,makeUniqueWord(s, parseinfo(prec,prec-1,prec,parsefuns(unaryop   ,binaryop))));
 binaryleft(s:string)    :Word := install(s,makeUniqueWord(s, parseinfo(prec,prec  ,nopr,parsefuns(errorunary,binaryop))));
-binaryleftword(s:string):Word :=           makeUniqueWord(s, parseinfo(prec,prec  ,nopr,parsefuns(errorunary,binaryop)));
-nleft (s:string)        :Word := install(s,makeUniqueWord(s, parseinfo(prec,prec  ,nopr,parsefuns(errorunary,nbinaryop))));
 nright(s:string)        :Word := install(s,makeUniqueWord(s, parseinfo(prec,prec-1,nopr,parsefuns(errorunary,nbinaryop))));
 nleftword(s:string)     :Word :=           makeUniqueWord(s, parseinfo(prec,prec  ,nopr,parsefuns(errorunary,nbinaryop)));
 nunarybinaryleft(s:string)    :Word := install(s,makeUniqueWord(s, parseinfo(prec,prec  ,prec,parsefuns(nnunaryop ,nbinaryop))));
@@ -206,17 +201,17 @@ special(s:string,f:function(Token,TokenFile,int,bool):ParseTree,lprec:int,rprec:
 --     	    "a unary postfix operator"
 
 bumpPrecedence();
-     wordEOF = nleftword("{*end of file*}");
+     wordEOF = nleftword("-*end of file*-");
      makeKeyword(wordEOF);
 bumpPrecedence();
-     wordEOC = nleftword("{*end of cell*}");
+     wordEOC = nleftword("-*end of cell*-");
      makeKeyword(wordEOC);
 bumpPrecedence();
      precRightParen := prec;
 bumpPrecedence();
      export SemicolonW := nright(";");
      export SemicolonS := makeKeyword(SemicolonW);
-     NewlineW = nleftword("{*newline*}");
+     NewlineW = nleftword("-*newline*-");
 bumpPrecedence();
      export CommaW := nunarybinaryleft(","); export commaS := makeKeyword(CommaW);
 bumpPrecedence();
@@ -253,6 +248,9 @@ bumpPrecedence();
      export LongDoubleLeftArrowS := makeKeyword(unarybinaryright("<==")); -- also binary
 bumpPrecedence();
      export orS := makeKeyword(binaryrightword("or"));
+     export QuestionQuestionS := makeKeyword(unarybinaryright("??"));
+bumpPrecedence();
+     export xorS := makeKeyword(binaryrightword("xor"));
 bumpPrecedence();
      export andS := makeKeyword(binaryrightword("and"));
 bumpPrecedence();
@@ -292,6 +290,7 @@ bumpPrecedence();
 bumpPrecedence();
      precBracket := prec;
      export leftbracket := parens("[","]",precBracket, precRightParen, precRightParen);
+     export leftAngleBar := parens("<|","|>",precBracket, precRightParen, precRightParen);
 bumpPrecedence();
      export BackslashBackslashS := makeKeyword(binaryright("\\\\"));
      export StarS := makeKeyword(unarybinaryleft("*"));	    -- also binary
@@ -312,6 +311,7 @@ bumpPrecedence();
      export elapsedTimeS := special("elapsedTime",unaryop,precSpace,wide);
      export elapsedTimingS := special("elapsedTiming",unaryop,precSpace,wide);
      export shieldS := special("shield",unaryop,precSpace,wide);
+     export TestS := special("TEST",unaryop,precSpace,wide);
      export throwS := special("throw",nunaryop,precSpace,wide);
      export returnS := special("return",nunaryop,precSpace,wide);
      export breakS := special("break",nunaryop,precSpace,wide);
@@ -330,23 +330,39 @@ bumpPrecedence();
      export AtAtS := makeKeyword(binaryleft("@@"));
 bumpPrecedence();
      export TildeS := makeKeyword(postfix("~"));
+     export PowerTildeS := makeKeyword(postfix("^~"));
+     export UnderscoreTildeS := makeKeyword(postfix("_~"));
      export UnderscoreStarS := makeKeyword(postfix("_*"));
      export PowerStarS := makeKeyword(postfix("^*"));
 bumpPrecedence();
      export PowerS := makeKeyword(binaryleft("^"));
+     export PowerGreaterS        := makeKeyword(binaryleft("^>"));
+     export PowerGreaterEqualS   := makeKeyword(binaryleft("^>="));
+     export PowerLessS           := makeKeyword(binaryleft("^<"));
+     export PowerLessEqualS      := makeKeyword(binaryleft("^<="));
      export PowerStarStarS := makeKeyword(binaryleft("^**"));
+     export BarUnderscoreS := makeKeyword(binaryleft("|_"));
      export UnderscoreS := makeKeyword(binaryleft("_"));
+     export UnderscoreGreaterS        := makeKeyword(binaryleft("_>"));
+     export UnderscoreGreaterEqualS   := makeKeyword(binaryleft("_>="));
+     export UnderscoreLessS           := makeKeyword(binaryleft("_<"));
+     export UnderscoreLessEqualS      := makeKeyword(binaryleft("_<="));
      export SharpS := makeKeyword(unarybinaryleft("#")); SharpS.symbol.word.parse.unaryStrength = precSpace-1;
      export SharpQuestionS := makeKeyword(binaryleft("#?"));
      export DotS := makeKeyword(binaryleft("."));
      export DotQuestionS := makeKeyword(binaryleft(".?"));
 bumpPrecedence();
      export ExclamationS := makeKeyword(postfix("!"));
+     export PowerExclamationS := makeKeyword(postfix("^!"));
+     export UnderscoreExclamationS := makeKeyword(postfix("_!"));
+     -- TODO: can't work because of instances like R^#m
+     --export PowerSharpS := makeKeyword(postfix("^#"));
+     --export UnderscoreSharpS := makeKeyword(postfix("_#"));
 bumpPrecedence();
      --why are these using precSpace and not prec?
      special("symbol",unarysymbol,precSpace,prec);
      special("global",unaryglobal,precSpace,prec);
-     special("threadVariable",unarythread,precSpace,prec);
+     special("threadLocal",unarythread,precSpace,prec);
      special("local",unarylocal,precSpace,prec);
 -----------------------------------------------------------------------------
 export GlobalAssignS := makeProtectedSymbolClosure("GlobalAssignHook");
@@ -360,7 +376,9 @@ export LeftArrowE := Expr(LeftArrowS);
 
 export EqualEqualE := Expr(EqualEqualS);
 export LessE := Expr(LessS);
+export LessEqualE := Expr(LessEqualS);
 export GreaterE := Expr(GreaterS);
+export GreaterEqualE := Expr(GreaterEqualS);
 export incomparableE := Expr(incomparableS);
 
 export NewS := makeProtectedSymbolClosure("NewMethod");
@@ -377,9 +395,16 @@ export NewOfFromE := Expr(NewOfFromS);
 
 export InverseS := makeProtectedSymbolClosure("InverseMethod");
 export InverseE := Expr(InverseS);
+
+export RobustPrintS := makeProtectedSymbolClosure("RobustPrintMethod");
+export RobustPrintE := Expr(RobustPrintS);
+
+export StopIterationS := makeProtectedSymbolClosure("StopIteration");
+export StopIterationE := Expr(StopIterationS);
+
 -----------------------------------------------------------------------------
 export makeSymbol(t:Token):Symbol := (
-     e := makeSymbol(t.word,position(t),t.dictionary);
+     e := makeSymbol(t.word,t.position,t.dictionary);
      t.entry = e;
      e);
 export makeErrorTree(e:ParseTree,message:string):void := (
@@ -401,20 +426,25 @@ makeSymbol(e:ParseTree,dictionary:Dictionary):void := (
 threadLocal lookupCountIncrement := 1;
 export lookup(word:Word,table:SymbolHashTable):(null or Symbol) := (
      if table == dummySymbolHashTable then error("dummy symbol table used");
+     lockRead(table.mutex);
      entryList := table.buckets.(
 	  word.hash & (length(table.buckets)-1)
 	  );
+     res := (null or Symbol)(NULL);
      while true do
      when entryList
-     is null do return NULL
+     is null do break
      is entryListCell:SymbolListCell do (
 	  if entryListCell.word == word 
 	  then (
 	       e := entryListCell.entry;
 	       e.lookupCount = e.lookupCount + lookupCountIncrement;
-	       return e;
+	       res = e;
+	       break;
 	       );
-	  entryList = entryListCell.next));
+	  entryList = entryListCell.next);
+     unlock(table.mutex);
+     res);
 
 export globalLookup(w:Word):(null or Symbol) := (
      d := globalDictionary;
@@ -436,6 +466,7 @@ lookup(t:Token,forcedef:bool,thread:bool):void := (
      	  when lookup(t.word,t.dictionary)
      	  is entry:Symbol do (
 	       t.entry = entry;
+	       if entry.position == tempPosition then entry.position = t.position;
 	       if entry.flagLookup then (
 		    printErrorMessage(t,"flagged symbol encountered");
 		    HadError=true;
@@ -457,7 +488,7 @@ lookup(t:Token,forcedef:bool,thread:bool):void := (
 
 		    locallyCreated := t.dictionary.frameID != 0 && dictionaryDepth(t.dictionary) > 0;
 		    t.dictionary = globalDictionary; -- undefined variables are defined as global
-		    t.entry = makeSymbol(t.word,position(t),globalDictionary,thread,locallyCreated);
+		    t.entry = makeSymbol(t.word,t.position,globalDictionary,thread,locallyCreated);
 		    )
 	       else (
 	       	    printErrorMessage(t,"undefined symbol " + t.word.name);
@@ -466,17 +497,32 @@ lookup(t:Token):void := lookup(t,true,false);
 lookuponly(t:Token):void := lookup(t,false,false);
 -----------------------------------------------------------------------------
 export opsWithBinaryMethod := array(SymbolClosure)(
-     LessLessS, GreaterGreaterS, EqualEqualS, QuestionS, BarBarS, 
-     LongBiDoubleArrowS, DeductionS,
+     LessLessS, GreaterGreaterS, EqualEqualS, QuestionS, BarBarS,
+     LongBiDoubleArrowS, DeductionS, QuestionQuestionS,
      LongDoubleRightArrowS, LongLongDoubleRightArrowS,
      LongDoubleLeftArrowS, LongLongDoubleLeftArrowS,
      ColonS, BarS, HatHatS, AmpersandS, DotDotS, DotDotLessS, MinusS, PlusS, PlusPlusS, StarStarS, StarS, BackslashBackslashS, DivideS, LeftDivideS, PercentS, SlashSlashS, AtS, 
-     AdjacentS, AtAtS, PowerS, UnderscoreS, PowerStarStarS, orS, andS);
+     AdjacentS, AtAtS, orS, andS, xorS,
+     -- TODO: why are these four not listed here?
+     -- GreaterS, GreaterEqualS, LessS, LessEqualS,
+     BarUnderscoreS,
+     PowerS,               UnderscoreS,
+     PowerGreaterS,        UnderscoreGreaterS,
+     PowerGreaterEqualS,   UnderscoreGreaterEqualS,
+     PowerLessS,           UnderscoreLessS,
+     PowerLessEqualS,      UnderscoreLessEqualS,
+     PowerStarStarS
+     );
 export opsWithUnaryMethod := array(SymbolClosure)(
-     StarS, MinusS, PlusS, LessLessS, 
+     StarS, MinusS, PlusS, LessLessS, QuestionQuestionS,
      LongDoubleLeftArrowS, LongLongDoubleLeftArrowS, 
      notS, DeductionS, QuestionS,LessS,GreaterS,LessEqualS,GreaterEqualS);
-export opsWithPostfixMethod := array(SymbolClosure)( TildeS, ParenStarParenS, UnderscoreStarS, PowerStarS ,ExclamationS );
+export opsWithPostfixMethod := array(SymbolClosure)(
+    ExclamationS,    PowerExclamationS, UnderscoreExclamationS,
+    -- FIXME:        PowerSharpS,       UnderscoreSharpS,
+    ParenStarParenS, PowerStarS,        UnderscoreStarS,
+    TildeS,          PowerTildeS,       UnderscoreTildeS
+    );
 
 -- ":=" "=" "<-" "->"  "=>" "===" "=!=" "!=" "#" "#?" "." ".?" ";" "," "<" ">" "<=" ">="
 export fixedBinaryOperators := array(SymbolClosure)(ColonEqualS,EqualS,LeftArrowS,RightArrowS,DoubleArrowS,EqualEqualEqualS,NotEqualEqualEqualS,NotEqualS,SharpS,SharpQuestionS,
@@ -487,6 +533,61 @@ export fixedPrefixOperators := array(SymbolClosure)(commaS,SharpS);
 
 -- ";" ","
 export fixedPostfixOperators := array(SymbolClosure)(SemicolonS,commaS);
+
+------------------------------------
+-- augmented assignment operators --
+------------------------------------
+
+-- same precendence as =
+saveprec := prec;
+prec = EqualW.parse.precedence;
+
+-- create one for most flexible binary operators
+export augmentedAssignmentOperatorTable := newSymbolHashTable();
+offset := 0;
+export augmentedAssignmentOperatorWords := (
+    new array(Word)
+    -- update the subtracted number here to match number of operators below
+    len length(opsWithBinaryMethod) - 17 at i
+    do (
+	-- to avoid ambiguity and syntax errors, we don't create augmented
+	-- assignment operators for ==, <==, <===, :, SPACE, or, and, xor, ?
+	-- also _< _<= _> _>= ^< ^<= ^> ^>=
+	while (
+	    opsWithBinaryMethod.(i + offset) === UnderscoreLessS          ||
+	    opsWithBinaryMethod.(i + offset) === UnderscoreLessEqualS     ||
+	    opsWithBinaryMethod.(i + offset) === UnderscoreGreaterS       ||
+	    opsWithBinaryMethod.(i + offset) === UnderscoreGreaterEqualS  ||
+	    opsWithBinaryMethod.(i + offset) === PowerLessS               ||
+	    opsWithBinaryMethod.(i + offset) === PowerLessEqualS          ||
+	    opsWithBinaryMethod.(i + offset) === PowerGreaterS            ||
+	    opsWithBinaryMethod.(i + offset) === PowerGreaterEqualS       ||
+	    opsWithBinaryMethod.(i + offset) === EqualEqualS              ||
+	    opsWithBinaryMethod.(i + offset) === LongDoubleLeftArrowS     ||
+	    opsWithBinaryMethod.(i + offset) === LongLongDoubleLeftArrowS ||
+	    opsWithBinaryMethod.(i + offset) === ColonS                   ||
+	    opsWithBinaryMethod.(i + offset) === AdjacentS                ||
+	    opsWithBinaryMethod.(i + offset) === orS                      ||
+	    opsWithBinaryMethod.(i + offset) === andS                     ||
+	    opsWithBinaryMethod.(i + offset) === xorS                     ||
+	    opsWithBinaryMethod.(i + offset) === QuestionS)
+	do offset = offset + 1;
+	bop := opsWithBinaryMethod.(i + offset).symbol;
+	aaop := binaryright(bop.word.name + "=");
+	insert(augmentedAssignmentOperatorTable, aaop, bop);
+	provide aaop));
+prec = saveprec;
+
+export isAugmentedAssignmentOperatorWord(word:Word):bool := (
+    foreach op in augmentedAssignmentOperatorWords
+    do if op == word then return true;
+    false);
+
+export augmentedAssignmentOperators := (
+    new array(SymbolClosure)
+    len length(augmentedAssignmentOperatorWords)
+    do foreach word in augmentedAssignmentOperatorWords
+    do provide makeKeyword(word));
 
 -----------------------------------------------------------------------------
 bind(t:Token,dictionary:Dictionary):void := (
@@ -658,30 +759,25 @@ bindassignment(assn:Binary,dictionary:Dictionary,colon:bool):void := (
 	  )
      is n:New do (
 	  if colon then (
-	       bind(n.newclass,dictionary);
-	       bind(n.newparent,dictionary);
-	       bind(n.newinitializer,dictionary);
-	       bind(body,dictionary))
+	    bind(n.newClass,       dictionary);
+	    bind(n.newParent,      dictionary);
+	    bind(n.newInitializer, dictionary);
+	    bind(body,             dictionary))
 	  else makeErrorTree(assn.Operator, 
 	       "left hand side of assignment inappropriate"))
      else makeErrorTree(assn.Operator, 
 	  "left hand side of assignment inappropriate"));
-bindnewdictionary(e:ParseTree,dictionary:Dictionary):ParseTree := (
-     n := newLocalDictionary(dictionary);
-     bind(e,n);
-     ParseTree(StartDictionary(n,e)));
 export bind(e:ParseTree,dictionary:Dictionary):void := (
      when e
-     is s:StartDictionary do bind(s.body,dictionary)
      is i:IfThen do (
 	  bind(i.predicate,dictionary);
-	  -- i.thenclause = bindnewdictionary(i.thenclause,dictionary);
-	  bind(i.thenclause,dictionary);
+	  -- i.thenClause = bindnewdictionary(i.thenClause,dictionary);
+	  bind(i.thenClause,dictionary);
 	  )
      is i:IfThenElse do (
 	  bind(i.predicate,dictionary);
-	  -- i.thenclause = bindnewdictionary(i.thenclause,dictionary);
-	  bind(i.thenclause,dictionary);
+	  -- i.thenClause = bindnewdictionary(i.thenClause,dictionary);
+	  bind(i.thenClause,dictionary);
 	  -- i.elseClause = bindnewdictionary(i.elseClause,dictionary);
 	  bind(i.elseClause,dictionary);
 	  )
@@ -789,14 +885,19 @@ export bind(e:ParseTree,dictionary:Dictionary):void := (
 	  bind(w.doClause,dictionary);
 	  )
      is n:New do (
-     	  bind(n.newclass,dictionary);
-     	  bind(n.newparent,dictionary);
-     	  bind(n.newinitializer,dictionary);)
+	 bind(n.newClass,       dictionary);
+	 bind(n.newParent,      dictionary);
+	 bind(n.newInitializer, dictionary);
+	 )
      is i:TryElse do (
 	  -- i.primary = bindnewdictionary(i.primary,dictionary);
 	  bind(i.primary,dictionary);
 	  -- i.alternate = bindnewdictionary(i.alternate,dictionary);
 	  bind(i.alternate,dictionary);
+	  )
+     is i:TryThen do (
+	  bind(i.primary,dictionary);
+	  bind(i.sequel,dictionary);
 	  )
      is i:TryThenElse do (
 	  bind(i.primary,dictionary);

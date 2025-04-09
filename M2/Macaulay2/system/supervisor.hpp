@@ -1,30 +1,21 @@
-#ifndef _system_supervisor_h_
-#define _system_supervisor_h_
+#pragma once
 
-/* this next bit is copied from ../d/atomic.d, but it should be include, instead */
-
-  #include <atomic_ops.h>
-#ifndef atomic_field_decl
-#define atomic_field_decl
-  struct atomic_field {
-       AO_t field;
-       };
-
-  #define load_Field(x) AO_load(&(x).field)
-  #define test_Field(x) (load_Field(x) != 0)
-  #define store_Field(x,val) AO_store(&(x).field,val)
-#endif
 #include "mutexclass.hpp"
+#include "gc_std.hpp"
+#include "M2/atomic-field.h"
 #include <M2/gc-include.h>
 #include <set>
 #include <map> 
 #include <list>
 
 typedef struct parse_ThreadCellBody_struct * parse_ThreadCellBody;
-
 typedef void* (*ThreadTaskFunctionPtr)(void*);
+
 class SupervisorThread;
-//not garbage collected
+
+/**
+   not garbage collected
+**/
 struct ThreadTask
 {
   ThreadTask(const char* name, ThreadTaskFunctionPtr func, void* userData, bool timeLimit, time_t timeLimitSeconds, bool isM2Task);
@@ -37,7 +28,7 @@ struct ThreadTask
   void* m_UserData;
   ///result of task
   void* m_Result;
-  ///Is this a task from the M2 interperter
+  ///Is this a task from the M2 interpreter
   bool m_IsM2Task;
   ///is the task done
   bool m_Done;
@@ -50,30 +41,32 @@ struct ThreadTask
   ///Is the task currently running
   bool m_Running;
   ///tasks to cancel upon completion
-  std::set<ThreadTask*> m_CancelTasks;
+  gc_set(ThreadTask*) m_CancelTasks;
   ///tasks to start upon completion
-  std::set<ThreadTask*> m_StartTasks;
+  gc_set(ThreadTask*) m_StartTasks;
   ///Is there a time limit for this task
   bool m_TimeLimit;
   ///Time limit in seconds for this task.  
   time_t m_Seconds;
   ///Dependencies that must be satisfied in order to start
-  std::set<ThreadTask*> m_Dependencies;
+  gc_set(ThreadTask*) m_Dependencies;
   ///Dependencies that have been finished
-  std::set<ThreadTask*> m_FinishedDependencies;
+  gc_set(ThreadTask*) m_FinishedDependencies;
   ///Mutex for accessing task
   pthreadMutex m_Mutex;
   ///run task
   void run(SupervisorThread* thread);
-  ///Condition variable for task
+  ///Condition variable for task done or canceled
   pthread_cond_t m_FinishCondition;
   ///Current thread running on
   SupervisorThread* m_CurrentThread;
+  ///Wait until the task is done or canceled
   void* waitOn();
 };
 
-
-//not garbage collected
+/**
+   not garbage collected
+**/
 struct ThreadSupervisorInformation
 {
   ///Id for thread
@@ -129,7 +122,7 @@ struct ThreadSupervisor
   ///Target number of threads to have running at once.
   int m_TargetNumThreads;
   ///map between pthread id's and thread information structures
-  std::map<pthread_t, struct ThreadSupervisorInformation*> m_ThreadMap;
+  gc_map(pthread_t, struct ThreadSupervisorInformation*) m_ThreadMap;
   ///list of ready to go tasks
   std::list<ThreadTask*> m_ReadyTasks;
   ///list of running tasks
@@ -142,12 +135,12 @@ struct ThreadSupervisor
   std::list<ThreadTask*> m_CanceledTasks;
   ///mutex for accessing lists
   pthreadMutex m_Mutex;
-  ///new task waiting
-  pthread_cond_t m_TaskWaitingCondition;
+  ///new task ready to run
+  pthread_cond_t m_TaskReadyToRunCondition;
   ///list of supervisor threads
   std::list<SupervisorThread*> m_Threads;
   ///set of initialized pointers
-  std::set<int*> m_ThreadLocalIdPtrSet;
+  gc_set(int*) m_ThreadLocalIdPtrSet;
   ///initialize
   void initialize();
   ///thread local id's
@@ -156,5 +149,3 @@ struct ThreadSupervisor
 };
 
 #include "supervisorinterface.h"
-
-#endif

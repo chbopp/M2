@@ -3,9 +3,9 @@
 #ifndef _ring_elem_hh_
 #define _ring_elem_hh_
 
-#include "engine.h"
 #include "ring.hpp"
-class Monomial;
+
+class EngineMonomial;
 
 class RingElement : public EngineObject
 {
@@ -21,12 +21,9 @@ class RingElement : public EngineObject
   static RingElement *make_raw(const Ring *R, ring_elem f);
 
   ring_elem get_value() const { return val; }
-  void set_value(ring_elem f)
-  {
-    R->remove(val);
-    val = f;
-  }
+
   const Ring *get_ring() const { return R; }
+
   // ring arithmetic
 
   bool is_zero() const;
@@ -38,15 +35,10 @@ class RingElement : public EngineObject
   RingElement *operator-(const RingElement &b) const;
   RingElement *operator*(const RingElement &b) const;
   RingElement *operator*(int n) const;
-  RingElement *power(mpz_t n) const;
+  RingElement *power(mpz_srcptr n) const;
   RingElement *power(int n) const;
 
   RingElement *operator/(const RingElement &b) const;
-#if 0
-//   RingElement *operator%(const RingElement &b) const;
-//   RingElement *divide(const RingElement &b,
-//                    RingElement * &rem) const;
-#endif
   RingElement *invert() const;
 
   static RingElement *random(const Ring *R);
@@ -80,17 +72,17 @@ class RingElement : public EngineObject
   int n_terms(int nvars) const;
   RingElement /* or null */ *get_terms(int nvars, int lo, int hi) const;
   RingElement /* or null */ *get_coeff(const Ring *coeffR,
-                                       const Monomial *m) const;
+                                       const EngineMonomial *m) const;
   RingElement /* or null */ *lead_coeff(const Ring *coeffR) const;
-  Monomial /* or null */ *lead_monom(int nvars) const;
+  EngineMonomial /* or null */ *lead_monom(int nvars) const;
   ////////////////////////////////////
 
   bool is_homogeneous() const;
-  RingElement *homogenize(int v, M2_arrayint wts) const;
-  RingElement *homogenize(int v, int deg, M2_arrayint wts) const;
-  void degree_weights(M2_arrayint wts, int &lo, int &hi) const;
-  M2_arrayint multi_degree() const;
-  //  intarray  degree() const;
+  RingElement *homogenize(int v, const std::vector<int> &wts) const;
+  RingElement *homogenize(int v, int deg, const std::vector<int> &wts) const;
+  void degree_weights(const std::vector<int> &wts, int &lo, int &hi) const;
+  const_monomial degree() const { return R->degree(val); }
+  bool multi_degree(monomial d) const { return R->multi_degree(val, d); }
 
   // See engine.h for the definition of 'content' here
   const RingElement /* or null */ *content() const;
@@ -112,7 +104,7 @@ class RingElement : public EngineObject
   // otherwise: returns true, and sets result_coeffs.
   // (Mainly useful for univariate poly rings over finite fields)
   bool getSmallIntegerCoefficients(std::vector<long> &result_coeffs) const;
-  const M2_arrayintOrNull getSmallIntegerCoefficients() const;
+  M2_arrayintOrNull getSmallIntegerCoefficients() const;
 };
 
 inline RingElement::RingElement(const Ring *R0, ring_elem f) : R(R0), val(f) {}

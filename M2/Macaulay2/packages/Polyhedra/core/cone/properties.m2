@@ -19,14 +19,14 @@ compute#Cone#isWellDefined Cone := C -> (
    );
    if hasProperties(C, {inequalities, equations}) then (
       hasEnoughProperties = true;
-      C3 := intersection(getProperty(C, inequalities), getProperty(C, equations));
+      C3 := coneFromHData(getProperty(C, inequalities), getProperty(C, equations));
       if not testDim == dim C3 then return false;
       if not testAmbientDim == ambDim C3 then return false;
       if not (C3 == C) then return false
    );
    if hasProperties(C, {facets, computedHyperplanes}) then (
       hasEnoughProperties = true;
-      C4 := intersection(facets C, hyperplanes C);
+      C4 := coneFromHData(facets C, hyperplanes C);
       if not testDim == dim C4 then return false;
       if not testAmbientDim == ambDim C4 then return false;
       if not (C4 == C) then return false
@@ -40,12 +40,6 @@ compute#Cone#pointed Cone := C -> (
    rank linealitySpace C == 0
 )
 
-
-compute#Cone#fullDimensional = method()
-compute#Cone#fullDimensional Cone := C -> (
-   dim C == ambDim C
-)
- 
 
 compute#Cone#smooth = method()
 compute#Cone#smooth Cone := C -> (
@@ -181,16 +175,11 @@ compute#Cone#computedDimension Cone := C -> (
 )
 
 
+importFrom_Core { "raw", "rawHilbertBasis" } -- calls libnormaliz
 compute#Cone#computedHilbertBasis = method()
 compute#Cone#computedHilbertBasis Cone := C -> (
-   inputMatrix := (facets C) || (hyperplanes C) || ( - hyperplanes C);
-   hb := transpose hilbertBasis(transpose inputMatrix, InputType=>"lattice");
-   r := ring inputMatrix;
-   result := apply(0..(numColumns hb - 1), i -> hb_i);
-   eq := hyperplanes C;
-   zero :=  transpose matrix {toList ((numRows eq):0)};
-   result = apply(result, h -> (promote(matrix h, r)) // inputMatrix);
-   toList result
+   hb := transpose map(ZZ, rawHilbertBasis raw transpose rays C);
+   apply(numColumns hb, i -> hb_{i})
 )
 
 

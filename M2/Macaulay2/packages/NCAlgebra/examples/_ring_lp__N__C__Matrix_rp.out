@@ -1,4 +1,4 @@
--- -*- M2-comint -*- hash: 1182998225
+-- -*- M2-comint -*- hash: 6190422818304499409
 
 i1 : A = QQ{a,b,c,d}
 
@@ -8,9 +8,8 @@ o1 : NCPolynomialRing
 
 i2 : M = ncMatrix {{a,b,c,d},{b,c,d,a}}
 
-o2 = | a  b  c  d |
-     |            |
-     | b  c  d  a |
+o2 = | a b c d |
+     | b c d a |
 
 o2 : NCMatrix
 

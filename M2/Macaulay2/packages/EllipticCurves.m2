@@ -7,8 +7,9 @@ newPackage(
 		  Email => "oneto@math.su.se"},
 	    {Name => "Stefano Marseglia", 
 		  Email => "stefanom@math.su.se"}},
-    	Headline => "Group law on elliptic curves (and counting points with brute force methods)",
-    	DebuggingMode => true
+	PackageImports => {"Varieties"},
+	Keywords => {"Algebraic Number Theory"},
+    	Headline => "group law on elliptic curves (and counting points with brute force methods)"
     	)
 
 export {
@@ -48,7 +49,7 @@ EllipticCurveW = new Type of HashTable
 EllPoint = new Type of HashTable
 EllPointW = new Type of HashTable
 ---------------------------------------------
--- Definying elliptic curves and points
+-- Defining elliptic curves and points
 ---------------------------------------------
 ellCurve = method()
 ellCurve(Thing,Thing,Thing) := (A,B,K) ->(
@@ -505,7 +506,9 @@ beginDocumentation()
 
 document {
      Key => EllipticCurves,
-     Headline => "A package for basic functions on elliptic curves and a bruteforce method for point counting.",
+     Headline => "elliptic curves and a brute-force method for point counting",
+     "This package defines classes for elliptic curves, points on elliptic ",
+     "curves, and related methods."
      }
 
 document {
@@ -535,7 +538,7 @@ document {
 
 document {
     Key => (ellCurve,Thing,Thing,Thing),
-    Inputs => {"A"=>{"a coefficient in the field ", TT "K"}, "B"=>{"a coefficient in the field ", TO "K"}, "K"=>{"any field"}},
+    Inputs => {"A"=>{"a coefficient in the field ", TT "K"}, "B"=>{"a coefficient in the field ", TT "K"}, "K"=>{"any field"}},
     Outputs => {ofClass EllipticCurve},
     Usage => "ellCurve(A,B,K)",
     Headline => "A method for creating elliptic curves in short Weierstrass form.",
@@ -561,7 +564,7 @@ document {
     Outputs => {ofClass EllPoint},
     Usage => "ellPoint(L,E)",
     Headline => "A method for defining point on an elliptic curve.",
-    PARA {"Returns the point of projecive coordinates { ", TT "L#0"," : ", TT "L#1"," : ", TT "L#2"," } on the elliptic curve ", TT "E"},
+    PARA {"Returns the point of projective coordinates { ", TT "L#0"," : ", TT "L#1"," : ", TT "L#2"," } on the elliptic curve ", TT "E"},
     EXAMPLE {"E=ellCurve(3,8,GF(13))","P=ellPoint({1,5,1},E)"}
     }
 document {
@@ -582,7 +585,7 @@ document {
     Inputs => {"L"=>{"the projective coordinates of the point"}, "E"=>{"the elliptic curve on which the point lies"}},
     Usage => "isOnEllCurve(L,E)",
     Headline => "A method to check if a point is on an elliptic curve.",
-    PARA {"Tells whether the point of projecive coordinates { ", TT "L#0"," : ", TT "L#1"," : ", TT "L#2"," } is on the elliptic curve ", TT "E"},
+    PARA {"Tells whether the point of projective coordinates { ", TT "L#0"," : ", TT "L#1"," : ", TT "L#2"," } is on the elliptic curve ", TT "E"},
     EXAMPLE {"E=ellCurve(3,8,GF(13))","isOnEllCurve({1,5,1},E)"}
     }
 document {
@@ -590,7 +593,7 @@ document {
     Inputs => {"L"=>{"the projective coordinates of the point"}, "E"=>{"the elliptic curve on which the point lies"}},
     Usage => "isOnEllCurve(L,E)",
     Headline => "A method to check if a point is on an elliptic curve.",
-    PARA {"Tells whether the point of projecive coordinates { ", TT "L#0"," : ", TT "L#1"," : ", TT "L#2"," } is on the elliptic curve ", TT "E"},
+    PARA {"Tells whether the point of projective coordinates { ", TT "L#0"," : ", TT "L#1"," : ", TT "L#2"," } is on the elliptic curve ", TT "E"},
     EXAMPLE {"E=ellCurve({1,2,3,4,6},GF(29))","isOnEllCurve({1,5,1},E)"}
     }
 document {
@@ -623,7 +626,7 @@ document {
     Key => {toShortWForm,(toShortWForm,EllipticCurveW)},
     Inputs => {"E"},
     Usage => "toShortWForm(E)",
-    Headline => "A method to trasform an elliptic curve from Weierstrass form to short Weierstrass form.",
+    Headline => "A method to transform an elliptic curve from Weierstrass form to short Weierstrass form.",
     EXAMPLE {"E=ellCurve({1,2,3,4,6},GF(29))","toShortWForm(E)"}
     }
 document {

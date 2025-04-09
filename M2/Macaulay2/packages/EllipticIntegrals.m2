@@ -7,6 +7,8 @@ newPackage(
 		  Email => "dan@math.uiuc.edu", 
 		  HomePage => "http://www.math.uiuc.edu/~dan/"}},
     	Headline => "uniformization of elliptic curves",
+	Keywords => {"Complex Analytic Geometry", "Numerical Algebraic Geometry"},
+	PackageImports => {"Varieties"},
     	DebuggingMode => false
     	)
 
@@ -161,9 +163,9 @@ ellset = (b,c) -> (
 	  disc := sqrt( b^2 - 4*c );
 	  (- b + disc)/2, (- b - disc)/2       -- return r,s; larger root first
 	  );
-     translater := (r,s) -> (-r,s-r);			    -- prefer this one
+     translator := (r,s) -> (-r,s-r);			    -- prefer this one
      -- translates := (r,s) -> (-s,r-s);
-     chain' := makechain makebc translater makers (b0,c0);
+     chain' := makechain makebc translator makers (b0,c0);
      period := pi/M;
      period' := pi/(sqrt (last last chain'));
      period' = period' - round (period' / period) * period;
@@ -466,6 +468,6 @@ Node
   Text
    This package provides some functions for computing elliptic integrals and elliptic functions.
    The basis for the computations is the arithmetic geometric mean, and the notation we use
-   comes from the paper @ HREF { "http://www.math.uiuc.edu/~dan/cv.html#agm", "The arithogeometric mean"} @,
+   comes from the paper @ HREF { "http://dangrayson.com/cv.xhtml#agm", "The arithogeometric mean"} @,
    Archiv der Mathematik, volume 52, 1989, pages 507-512.
 ///

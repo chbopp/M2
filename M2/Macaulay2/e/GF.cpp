@@ -35,7 +35,6 @@ private:
 #include "interrupted.hpp"
 
 #include "aring-m2-gf.hpp"
-#include <iostream>
 
 bool GF::initialize_GF(const RingElement *prim)
 {
@@ -51,10 +50,9 @@ bool GF::initialize_GF(const RingElement *prim)
 
   if (_originalR->n_quotients() != 1)
     {
-      ERROR(
+      throw exc::engine_error(
           "rawGaloisField expected an element of a quotient ring of the form "
           "ZZ/p[x]/(f)");
-      return false;
     }
   ring_elem f = _originalR->quotient_element(0);
   Nterm *t = f;
@@ -70,10 +68,10 @@ bool GF::initialize_GF(const RingElement *prim)
   _MINUS_ONE = (characteristic() == 2 ? _ONE : Q1_ / 2);
 
   // Get ready to create the 'one_table'
-  array<ring_elem> polys;
-  polys.append(_originalR->from_long(0));
+  VECTOR(ring_elem) polys;
+  polys.push_back(_originalR->from_long(0));
   ring_elem primelem = prim->get_value();
-  polys.append(_originalR->copy(primelem));
+  polys.push_back(_originalR->copy(primelem));
 
   ring_elem oneR = _originalR->one();
 
@@ -83,15 +81,14 @@ bool GF::initialize_GF(const RingElement *prim)
   for (i = 2; i < Q_; i++)
     {
       ring_elem g = _originalR->mult(polys[i - 1], primelem);
-      polys.append(g);
+      polys.push_back(g);
       if (_originalR->is_equal(g, oneR)) break;
       if (_originalR->is_equal(g, x)) _x_exponent = i;
     }
 
-  if (polys.length() != Q_)
+  if (polys.size() != Q_)
     {
-      ERROR("GF: primitive element expected");
-      return false;
+      throw exc::engine_error("GF: primitive element expected");
     }
 
   assert(_x_exponent >= 0);
@@ -122,9 +119,6 @@ bool GF::initialize_GF(const RingElement *prim)
   oneV = from_long(1);
   minus_oneV = from_long(-1);
 
-  // M2::GaloisFieldTable G(*_originalR, primelem);
-  //  G.display(std::cout);
-
   return true;
 }
 
@@ -133,7 +127,7 @@ GF::~GF() {}
 GF *GF::create(const RingElement *prim)
 {
   GF *result = new GF;
-  if (!result->initialize_GF(prim)) return 0;
+  if (!result->initialize_GF(prim)) return nullptr;
 
   return result;
 }
@@ -148,9 +142,7 @@ const RingElement *GF::getMinimalPolynomial() const
 
 const RingElement *GF::getGenerator() const
 {
-  ring_elem a;
-  a.int_val = 1;  // this is the primitive generator
-
+  ring_elem a = ring_elem(1); // this is the primitive generator
   return RingElement::make_raw(this, a);
 }
 
@@ -158,20 +150,20 @@ const RingElement *GF::getRepresentation(const ring_elem &a) const
 {
   return RingElement::make_raw(
       _originalR,
-      _originalR->power(_primitive_element->get_value(), a.int_val));
+      _originalR->power(_primitive_element->get_value(), a.get_int()));
 }
 
 ring_elem GF::get_rep(ring_elem a) const
 // takes an element of this ring, and returns an element of _originalR->XXX()
 {
-  return _originalR->power(_primitive_element->get_value(), a.int_val);
+  return _originalR->power(_primitive_element->get_value(), a.get_int());
 }
 
 int GF::discrete_log(ring_elem a) const
 {
-  if (a.int_val == _ZERO) return -1;
-  if (a.int_val == Q1_) return 0;
-  return a.int_val;
+  if (a.get_int() == _ZERO) return -1;
+  if (a.get_int() == Q1_) return 0;
+  return a.get_int();
 }
 
 static inline int modulus_add(int a, int b, int p)
@@ -203,14 +195,14 @@ void GF::elem_text_out(buffer &o,
       o << "0";
       return;
     }
-  ring_elem h = _originalR->power(_primitive_element->get_value(), a.int_val);
+  ring_elem h = _originalR->power(_primitive_element->get_value(), a.get_int());
   _originalR->elem_text_out(o, h, p_one, p_plus, p_parens);
   _originalR->remove(h);
 }
 
 ring_elem GF::eval(const RingMap *map, const ring_elem f, int first_var) const
 {
-  return map->get_ring()->power(map->elem(first_var), f.int_val);
+  return map->get_ring()->power(map->elem(first_var), f.get_int());
 }
 
 ring_elem GF::from_long(long n) const
@@ -222,7 +214,7 @@ ring_elem GF::from_long(long n) const
   return ring_elem(m);
 }
 
-ring_elem GF::from_int(mpz_ptr n) const
+ring_elem GF::from_int(mpz_srcptr n) const
 {
   mpz_t result;
   mpz_init(result);
@@ -235,7 +227,7 @@ ring_elem GF::from_int(mpz_ptr n) const
   return ring_elem(m);
 }
 
-bool GF::from_rational(mpq_ptr q, ring_elem &result) const
+bool GF::from_rational(mpq_srcptr q, ring_elem &result) const
 {
   // a will be an element of ZZ/p
   ring_elem a;
@@ -264,21 +256,22 @@ bool GF::promote(const Ring *Rf, const ring_elem f, ring_elem &result) const
 
   if (Rf != _originalR) return false;
 
+  const Ring *K = _originalR->getCoefficients();
+
   result = from_long(0);
   int exp[1];
-  for (Nterm *t = f; t != NULL; t = t->next)
+  for (Nterm& t : f)
     {
-      std::pair<bool, long> b =
-          _originalR->getCoefficients()->coerceToLongInteger(t->coeff);
+      std::pair<bool, long> b = K->coerceToLongInteger(t.coeff);
       assert(b.first);
       ring_elem coef = from_long(b.second);
-      _originalR->getMonoid()->to_expvector(t->monom, exp);
+      _originalR->getMonoid()->to_expvector(t.monom, exp);
       // exp[0] is the variable we want.  Notice that since the ring is a
       // quotient,
       // this degree is < n (where Q_ = P^n).
       ring_elem g = power(_x_exponent, exp[0]);
       g = mult(g, coef);
-      internal_add_to(result, g);
+      result = ring_elem(internal_add(result.get_int(), g.get_int()));
     }
   return true;
 }
@@ -291,7 +284,7 @@ bool GF::lift(const Ring *Rg, const ring_elem f, ring_elem &result) const
 
   if (Rg != _originalR) return false;
 
-  int e = f.int_val;
+  int e = f.get_int();
   if (e == _ZERO)
     result = _originalR->from_long(0);
   else if (e == _ONE)
@@ -318,119 +311,123 @@ int GF::compare_elems(const ring_elem f, const ring_elem g) const
 }
 
 ring_elem GF::copy(const ring_elem f) const { return f; }
+
 void GF::remove(ring_elem &) const
 {
   // nothing needed to remove.
 }
 
-void GF::internal_negate_to(ring_elem &f) const
+int GF::internal_negate(int f) const
 {
-  if (f.get_int() != _ZERO) f = modulus_add(f.get_int(), _MINUS_ONE, Q1_);
+  if (f == _ZERO) return _ZERO;
+  return f = modulus_add(f, _MINUS_ONE, Q1_);
 }
 
-void GF::internal_add_to(ring_elem &f, ring_elem &g) const
+int GF::internal_add(int a, int b) const
 {
-  if (g == _ZERO) return;
-  if (f == _ZERO)
-    f = g;
+  if (b == _ZERO) return a;
+  if (a == _ZERO) return b;
+
+  int n = a - b;
+  if (n > 0)
+    {
+      if (n == _MINUS_ONE) return _ZERO;
+      return modulus_add(b, _one_table[n], Q1_);
+    }
+  else if (n < 0)
+    {
+      if (-n == _MINUS_ONE) return _ZERO;
+      return modulus_add(a, _one_table[-n], Q1_);
+    }
   else
     {
-      int a = f.int_val;
-      int b = g.int_val;
-      int n = a - b;
-      if (n > 0)
-        {
-          if (n == _MINUS_ONE)
-            f = _ZERO;
-          else
-            f = modulus_add(b, _one_table[n], Q1_);
-        }
-      else if (n < 0)
-        {
-          if (-n == _MINUS_ONE)
-            f = _ZERO;
-          else
-            f = modulus_add(a, _one_table[-n], Q1_);
-        }
-      else
-        {
-          if (characteristic() == 2)
-            f = _ZERO;
-          else
-            f = modulus_add(a, _one_table[_ONE], Q1_);
-        }
+      if (characteristic() == 2) return _ZERO;
+      return modulus_add(a, _one_table[_ONE], Q1_);
     }
 }
 
-void GF::internal_subtract_to(ring_elem &f, ring_elem &g) const
+int GF::internal_subtract(int f, int g) const
 {
-  if (g == _ZERO) return;
-  if (f.int_val == g.int_val)
-    {
-      f = _ZERO;
-      return;
-    }
-  ring_elem g1 = modulus_add(g, _MINUS_ONE, Q1_);  // f = -g
-  internal_add_to(f, g1);
+  if (g == _ZERO) return f;
+  if (f == g) return _ZERO;
+  int g1 = modulus_add(g, _MINUS_ONE, Q1_);  // f = -g
+  return internal_add(f, g1);
 }
 
 ring_elem GF::negate(const ring_elem f) const
 {
-  ring_elem result = f;
-  internal_negate_to(result);
-  return result;
+  return ring_elem(internal_negate(f.get_int()));
 }
 
 ring_elem GF::add(const ring_elem f, const ring_elem g) const
 {
-  ring_elem result = f;
-  ring_elem g1 = g;
-  internal_add_to(result, g1);
-  return result;
+  return ring_elem(internal_add(f.get_int(), g.get_int()));
 }
 
 ring_elem GF::subtract(const ring_elem f, const ring_elem g) const
 {
-  ring_elem result = f;
-  ring_elem g1 = g;
-  internal_subtract_to(result, g1);
-  return result;
+  return ring_elem(internal_subtract(f.get_int(), g.get_int()));
 }
 
 ring_elem GF::mult(const ring_elem f, const ring_elem g) const
 {
-  if (f == _ZERO || g == _ZERO) return _ZERO;
-  return modulus_add(f, g, Q1_);
+  if (f.get_int() == _ZERO || g.get_int() == _ZERO) return ring_elem(_ZERO);
+  return ring_elem(modulus_add(f.get_int(), g.get_int(), Q1_));
 }
 
 ring_elem GF::power(const ring_elem f, int n) const
 {
-  if (f == _ZERO) return _ZERO;
-  int m = (f * n) % Q1_;
-  if (m <= 0) m += Q1_;
-  return m;
+  if (f.get_int() != _ZERO)
+    {
+      int m = (f.get_int() * n) % Q1_;
+      if (m <= 0) m += Q1_;
+      return ring_elem(m);
+    }
+  else
+    {
+      // f == 0 element.
+      if (n == 0)
+        return ring_elem(_ONE);
+      else if (n > 0)
+        return ring_elem(_ZERO);
+      else
+        throw exc::division_by_zero_error();
+    }
 }
-ring_elem GF::power(const ring_elem f, mpz_t n) const
+ring_elem GF::power(const ring_elem f, mpz_srcptr n) const
 {
-  if (f == _ZERO) return _ZERO;
-  int exp = RingZZ::mod_ui(n, Q1_);
-  int m = (f * exp) % Q1_;
-  if (m <= 0) m += Q1_;
-  return m;
+  if (f.get_int() != _ZERO)
+    {
+      int exp = RingZZ::mod_ui(n, Q1_);
+      int m = (f.get_int() * exp) % Q1_; // WARNING TODO: possible overflow! Check!
+      if (m <= 0) m += Q1_;
+      return ring_elem(m);
+    }
+  else
+    {
+      if (mpz_sgn(n) == 0)
+        return ring_elem(_ONE);
+      else if (mpz_sgn(n) > 0)
+        return ring_elem(_ZERO);
+      else
+        throw exc::division_by_zero_error();
+    }
 }
 
 ring_elem GF::invert(const ring_elem f) const
 {
-  // error if f == _ZERO
-  if (f == _ONE) return _ONE;
-  return ring_elem(Q1_ - f);
+  if (f.get_int() == _ZERO)
+    throw exc::division_by_zero_error();
+  if (f.get_int() == _ONE) return ring_elem(_ONE);
+  return ring_elem(Q1_ - f.get_int());
 }
 
 ring_elem GF::divide(const ring_elem f, const ring_elem g) const
 {
-  if (g == _ZERO) assert(0);  // MES: raise an exception
-  if (f == _ZERO) return _ZERO;
-  return modulus_sub(f, g, Q1_);
+  if (g.get_int() == _ZERO)
+    throw exc::division_by_zero_error();
+  if (f.get_int() == _ZERO) return ring_elem(_ZERO);
+  return modulus_sub(f.get_int(), g.get_int(), Q1_);
 }
 
 void GF::syzygy(const ring_elem a,
@@ -440,7 +437,7 @@ void GF::syzygy(const ring_elem a,
 {
   x = GF::from_long(1);
   y = GF::divide(a, b);
-  GF::internal_negate_to(y);
+  y = ring_elem(internal_negate(y.get_int()));
 }
 
 // Local Variables:

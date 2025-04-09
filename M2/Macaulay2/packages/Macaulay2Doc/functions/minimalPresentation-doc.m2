@@ -1,7 +1,7 @@
 --- status: Draft
 --- author(s): Amelia Taylor
 --- notes: This is a new file bringing together both prune and minPres as a 
----        complete minimal presetation collection.  trim is inherently 
+---        complete minimal presentation collection.  trim is inherently 
 ---        different as it minimizes to the extent possible while preserving
 ---        the ambient module.
 
@@ -18,7 +18,7 @@ document {
      }
 
 document { 
-     Key => {(minimalPresentation,Ring),(prune,Ring),minimalPresentationMap, minimalPresentationMapInv},
+     Key => {(minimalPresentation,Ring),(prune,Ring),minimalPresentationMap, minimalPresentationMapInv, [minimalPresentation,Exclude], [prune,Exclude]},
      Headline => "compute a minimal presentation of a quotient ring",
      Usage => "S = minimalPresentation R\nS = prune R",
      Inputs => { "R" => { "a quotient ring" }},
@@ -135,10 +135,9 @@ document {
      Key => {(minimalPresentation,Module),
 	  (minimalPresentation, GradedModule),(minimalPresentation, GradedModuleMap),
 	  (minimalPresentation, ChainComplex),(minimalPresentation, ChainComplexMap),
-	  (minimalPresentation, CoherentSheaf),(prune,Module),
+	  (prune,Module),
 	  (prune, GradedModule),(prune, GradedModuleMap),
-	  (prune, ChainComplex),(prune, ChainComplexMap),
-	  (prune, CoherentSheaf)},
+	  (prune, ChainComplex),(prune, ChainComplexMap)},
      Headline => "minimal presentation of a module",
      Usage => "N = minimalPresentation M",
      Inputs => {
@@ -165,14 +164,6 @@ document {
  	  peek N.cache
 	  g = N.cache.pruningMap
 	  g^-1
-     ///,
-     "This function also works when ", TT "M", " is ", ofClass{GradedModule,ChainComplex,CoherentSheaf}, ",
-     by acting on the modules and maps within it.",
-     EXAMPLE lines ///
-	  I = ideal(a^2,b^3,c^4,d^7)
-     	  X = Proj R
-	  J = (module I)~
-	  minimalPresentation J
      ///,
      SeeAlso => {(minimalPresentation, Matrix), (trim, Module), (mingens,Module)}
      }

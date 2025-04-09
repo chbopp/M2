@@ -8,10 +8,10 @@ newPackage(
        Email => "diegcif@mit.edu",
        HomePage => "http://www.mit.edu/~diegcif"}
     },
-    Headline => "A package for triangular decompositions of ideals",
-    DebuggingMode => true,
+    Headline => "triangular decompositions of ideals",
+    Keywords => {"Commutative Algebra"},
     AuxiliaryFiles => true,
-    PackageImports => {"SimpleDoc","Binomials","MapleInterface"},
+    PackageImports => {"Binomials","MapleInterface","Elimination"},
     PackageExports => {}
 )
 
@@ -271,13 +271,13 @@ pseudoRemainder(RingElement,TriaSystem) := (f,T) -> (
 )
 RingElement % TriaSystem := (f,T) -> pseudoRemainder(f,T)
 
-resultant(RingElement,TriaSystem) := (f,T) -> (
+resultant(RingElement,TriaSystem) := opts -> (f,T) -> (
     if isConstant f then return f;
     for t in T.gens do(
         if f==0 then return f;
         x := mvar t;
         if mvar f < x then continue;
-        f = resultant(f,t,x);
+        f = resultant(f,t,x,opts);
     );
     return f;
 )
@@ -573,7 +573,7 @@ reduceDecomposition = TT -> (
     return select(TT, T->minl#T);
 )
 
--- minimial elements of a partial order
+-- minimal elements of a partial order
 -- cmp(a,b) = 1 if a>=b
 -- cmp(a,b) = -1 if a<b
 -- cmp(a,b) = 0 if incomparable 

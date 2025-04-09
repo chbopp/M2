@@ -5,6 +5,7 @@ use evaluate;
 use parser;
 use texmacs;
 use actors5;
+
 import dirname(s:string):string;
 
 dummyError := Error(dummyPosition,"dummy error message",nullE,false,dummyFrame);
@@ -43,15 +44,13 @@ runmethod(methodname:Expr,g:Expr):Expr := (
 
 endInput := makeProtectedSymbolClosure("end");
 
-PrintOut(g:Expr,semi:bool,f:Code):Expr := (
-     methodname := if semi then NoPrint else Print;
-     method := lookup(Class(g),methodname);
-     if method == nullE 
-     then printErrorMessageE(f,"no method for '" + methodname.symbol.word.name + "'")
-     else applyEE(method,g)
-     );
-
-header "extern \"C\" void check_M2init();";
+-- PrintOut(g:Expr,semi:bool,f:Code):Expr := (
+--      methodname := if semi then NoPrint else Print;
+--      method := lookup(Class(g),methodname);
+--      if method == nullE 
+--      then printErrorMessageE(f,"no method for '" + methodname.symbol.word.name + "'")
+--      else applyEE(method,g)
+--      );
 
 readeval4(file:TokenFile,printout:bool,dictionary:Dictionary,returnLastvalue:bool,stopIfBreakReturnContinue:bool,returnIfError:bool):Expr := (
      lastvalue := nullE;
@@ -66,7 +65,6 @@ readeval4(file:TokenFile,printout:bool,dictionary:Dictionary,returnLastvalue:boo
      issuePrompt := false;
      lasterrmsg := dummyError;
      while true do (
-     	  Ccode(void, "check_M2init()");
 	  if debugLevel == 123 then stderr <<  "------------ top of loop" << endl;
 	  if bumpLineNumber then (
 	       if debugLevel == 123 then stderr <<  "-- bumpLineNumber" << endl;
@@ -102,33 +100,36 @@ readeval4(file:TokenFile,printout:bool,dictionary:Dictionary,returnLastvalue:boo
 	       	    store(interruptedFlag, false);
 		    determineExceptionFlag();
 		    promptWanted = true;
-		    issuePrompt = true;
+		    if !file.posFile.file.readline then issuePrompt = true; -- I'm not sure why this works, but it does!  Assigning always leads to an extra prompt when readline is being used in a terminal window.
 		    )
 	       else (
 		    if debugLevel == 123 then stderr <<  "-- token read error" << endl;
 		    promptWanted = true;
 	       	    if fileError(file) then return buildErrorPacket(fileErrorMessage(file));
 	       	    if stopIfError || returnIfError then return buildErrorPacket("--backtrace: token read error--");
+		    if isatty(file) || file.posFile.file.fulllines then flushToken(file);
+		    file.posFile.line = file.posFile.line + 1;
+		    file.posFile.column = ushort(0);
 		    )
 	       )
 	  else (
 	       t := u.word;
 	       if t == wordEOF then (
-		    if debugLevel == 123 then stderr <<  "-- EOF token, returning: " << position(u) << endl;
+		    if debugLevel == 123 then stderr <<  "-- EOF token, returning: " << u.position << endl;
 		    return if returnLastvalue then lastvalue else nullE;
 		    )
 	       else if t == NewlineW then (
-		    if debugLevel == 123 then stderr <<  "-- newline token, discarding: " << position(u) << endl;
+		    if debugLevel == 123 then stderr <<  "-- newline token, discarding: " << u.position << endl;
 		    gettoken(file,true);
 		    )
 	       else if t == wordEOC then (
-		    if debugLevel == 123 then stderr <<  "-- end-of-cell token, discarding: " << position(u) << endl;
+		    if debugLevel == 123 then stderr <<  "-- end-of-cell token, discarding: " << u.position << endl;
 		    gettoken(file,true);
 		    )
 	       else (
 	  	    previousLineNumber = lineNumber;
 		    promptWanted = true;
-		    if debugLevel == 123 then stderr <<  "-- ordinary token, ready to parse: " << position(u) << endl;
+		    if debugLevel == 123 then stderr <<  "-- ordinary token, ready to parse: " << u.position << endl;
 		    parsed := parse(file,SemicolonW.parse.precedence,true);
 		    if parsed == errorTree then (
 			 if test(interruptedFlag) then (
@@ -143,6 +144,8 @@ readeval4(file:TokenFile,printout:bool,dictionary:Dictionary,returnLastvalue:boo
 		    	      if debugLevel == 123 then stderr <<  "-- error during parsing" << endl;
 			      if fileError(file) then return buildErrorPacket(fileErrorMessage(file));
 			      if stopIfError || returnIfError then return buildErrorPacket("--backtrace: parse error--");
+			      file.posFile.line = file.posFile.line + 1;
+			      file.posFile.column = ushort(0);
 			      );
 			 )
 		    else (
@@ -162,7 +165,7 @@ readeval4(file:TokenFile,printout:bool,dictionary:Dictionary,returnLastvalue:boo
 			 then (
 			      msg := "syntax error: unmatched " + s.word.name;
 			      printErrorMessage(s,msg);
-			      if stopIfError || returnIfError then return Expr(Error(position(s),msg,nullE,false,dummyFrame));
+			      if stopIfError || returnIfError then return Expr(Error(s.position,msg,nullE,false,dummyFrame));
 			      )
 			 else (
 			      if localBind(parsed,dictionary) -- assign scopes to tokens, look up symbols; returns false iff an error occurred
@@ -247,20 +250,18 @@ readeval4(file:TokenFile,printout:bool,dictionary:Dictionary,returnLastvalue:boo
 			      else (
 				   -- an error occurred in localBind
 				   if isatty(file) 
-				   then flush(file)
+				   then flushToken(file)
 				   else return (
 					if lasterrmsg != dummyError
 					then Expr(lasterrmsg)
 					else buildErrorPacket("error occurred in parsing")))))))));
 
 interpreterDepthS := setupvar("interpreterDepth",zeroE);
-incrementInterpreterDepth():void := (
-     interpreterDepth = interpreterDepth + 1;
-     setGlobalVariable(interpreterDepthS,toExpr(interpreterDepth)));
-decrementInterpreterDepth():void := (
-     interpreterDepth = interpreterDepth - 1;
-     setGlobalVariable(interpreterDepthS,toExpr(interpreterDepth)));
-
+setInterpreterDepth(n:int):void := (
+     interpreterDepth = n;
+     setGlobalVariable(interpreterDepthS, toExpr(interpreterDepth)));
+incrementInterpreterDepth():void := setInterpreterDepth(interpreterDepth + 1);
+decrementInterpreterDepth():void := setInterpreterDepth(interpreterDepth - 1);
 
 readeval3(file:TokenFile,printout:bool,dc:DictionaryClosure,returnLastvalue:bool,stopIfBreakReturnContinue:bool,returnIfError:bool):Expr := (
      saveLocalFrame := localFrame;
@@ -270,13 +271,17 @@ readeval3(file:TokenFile,printout:bool,dc:DictionaryClosure,returnLastvalue:bool
       savepf := currentPosFile;
 	setGlobalVariable(currentFileName,toExpr(file.posFile.file.filename));
 	setGlobalVariable(currentFileDirectory,toExpr(dirname(file.posFile.file.filename)));
-        currentPosFile = file.posFile;
+	if currentPosFile.file == stdIO && file.posFile.file == stdIO
+	then file.posFile = currentPosFile
+	else currentPosFile = file.posFile;
 	ret := readeval4(file,printout,dc.dictionary,returnLastvalue,stopIfBreakReturnContinue,returnIfError);
       setGlobalVariable(currentFileDirectory,savecd);
       setGlobalVariable(currentFileName,savecf);
       currentPosFile = savepf;
      localFrame = saveLocalFrame;
      ret);
+
+-- parse a file
 readeval(file:TokenFile,returnLastvalue:bool,returnIfError:bool):Expr := (
      savefe := getGlobalVariable(fileExitHooks);
      setGlobalVariable(fileExitHooks,emptyList);
@@ -383,12 +388,19 @@ load(e:Expr):Expr := (
      else buildErrorPacket("expected string as file name"));
 setupfun("simpleLoad",load);
 
-currentLineNumber(e:Expr):Expr := (
+currentRowNumber(e:Expr):Expr := (
      when e is s:Sequence do
      if length(s) == 0 then toExpr(int(currentPosFile.line))
      else WrongNumArgs(0)
      else WrongNumArgs(0));
-setupfun("currentLineNumber",currentLineNumber);
+setupfun("currentRowNumber",currentRowNumber);
+
+currentColumnNumber(e:Expr):Expr := (
+     when e is s:Sequence do
+     if length(s) == 0 then toExpr(int(currentPosFile.column))
+     else WrongNumArgs(0)
+     else WrongNumArgs(0));
+setupfun("currentColumnNumber",currentColumnNumber);
 
 input(e:Expr):Expr := (
      when e
@@ -454,8 +466,6 @@ export topLevel():bool := (
 commandInterpreter(dc:DictionaryClosure):Expr := loadprint("-",dc,false);
 commandInterpreter(f:Frame):Expr := commandInterpreter(newStaticLocalDictionaryClosure(localDictionaryClosure(f)));
 commandInterpreter(e:Expr):Expr := (
-     --saveLoadDepth := loadDepth;
-     --setLoadDepth(loadDepth+1);
      incrementInterpreterDepth();
        ret := 
        when e is s:Sequence do (
@@ -465,14 +475,13 @@ commandInterpreter(e:Expr):Expr := (
        is Nothing do loadprint("-",newStaticLocalDictionaryClosure(),false)
        is x:DictionaryClosure do commandInterpreter(x)
        is x:SymbolClosure do commandInterpreter(x.frame)
-       is x:CodeClosure do commandInterpreter(x.frame)
+       is x:PseudocodeClosure do commandInterpreter(x.frame)
        is x:FunctionClosure do commandInterpreter(x.frame)
        is cfc:CompiledFunctionClosure do commandInterpreter(emptyFrame)	    -- some values are there, but no symbols
        is CompiledFunction do commandInterpreter(emptyFrame)		    -- no values or symbols are there
        is s:SpecialExpr do commandInterpreter(s.e)
-       else WrongArg("a function, symbol, dictionary, pseudocode, or ()");
+       else WrongArg("a function, symbol, dictionary, pseudocode closure, or ()");
      decrementInterpreterDepth();
-     --setLoadDepth(saveLoadDepth);
      ret);
 setupfun("commandInterpreter",commandInterpreter);
 
@@ -483,7 +492,7 @@ debugger(f:Frame,c:Code):Expr := (
      recursionDepth = 0;
      setDebuggingMode(false);
        oldDebuggerCode := getGlobalVariable(currentS);
-       setGlobalVariable(currentS,Expr(CodeClosure(f,c)));
+       setGlobalVariable(currentS,Expr(PseudocodeClosure(f,c)));
 	 incrementInterpreterDepth();
 	   if debuggerHook != nullE then (
 		r := applyEE(debuggerHook,True);
@@ -510,7 +519,8 @@ value(e:Expr):Expr := (
 	  if i < length(vals) then vals.i 
 	  else nullE					    -- localFrame is the only one that might be short
 	  )
-     is c:CodeClosure do eval(c.frame,c.code)
+     is c:PseudocodeClosure do eval(c.frame,c.code)
+     is c:Pseudocode do eval(c.code)
      is s:stringCell do (
       	  savecs := getGlobalVariable(currentString);
 	  setGlobalVariable(currentString,e);
@@ -525,47 +535,54 @@ value(e:Expr):Expr := (
 	       else r)
 	  else r)
      else WrongArg(1,"a string, a symbol, or pseudocode"));
-setupfun("value",value).Protected = false;
-
-tmpbuf := new string len 100 do provide ' ' ;
+setupfun("value'",value);
 
 --May need thread work?
-internalCapture(e:Expr):Expr := (
+capture(e:Expr):Expr := (
      when e
      is s:stringCell do (
-     	  flush(stdIO);
-	  oldfd := stdIO.outfd;
+	  stdIO << flush;
+	  stdError << flush;
+	  oldStdError := stdError;
+	  setStdError(stdIO);
+	  oldStopIfError := stopIfError;
+	  setstopIfError(true);
 	  oldDebuggingMode := debuggingMode;
 	  setDebuggingMode(false);
-	  oldStderrE := getGlobalVariable(stderrS);
-	  oldstderr := stdError;
-	  stdError = stdIO;
-	  setGlobalVariable(stderrS,getGlobalVariable(stdioS));
-          foss := getFileFOSS(stdIO);
-	  --thread workaround -- unlock fileFOSS
-	  releaseFileFOSS(stdIO);
-	  stdIO.outfd = NOFD;
+	  oldInterpreterDepth := interpreterDepth;
+	  setInterpreterDepth(1);
+	  oldLineNumber := lineNumber;
+	  setLineNumber(0);
+	  previousLineNumber = -1;
+	  --
+	  foss := getFileFOSS(stdIO);
+	  foss.capturing = true;
 	  oldbuf := foss.outbuffer;
-	  foss.outbuffer = tmpbuf;
+	  oldbol := foss.outbol;
+	  oldindex := foss.outindex;
 	  stringFile := stringTokenFile("currentString", s.v+newline);
 	  stringFile.posFile.file.echo = true;
-	  oldLineNumber := lineNumber;
-	  previousLineNumber = -1;
-	  setLineNumber(0);
 	  setprompt(stringFile,topLevelPrompt);
+	  --
 	  r := readeval3(stringFile,true,newStaticLocalDictionaryClosure(),false,false,true);
+	  --
 	  out := substrAlwaysCopy(foss.outbuffer,0,foss.outindex);
-	  stdIO.outfd = oldfd;
+	  foss.capturing = false;
 	  foss.outbuffer = oldbuf;
-	  foss.outindex = 0;
-	  setGlobalVariable(stderrS,oldStderrE);
-	  stdError = oldstderr;
-	  setLineNumber(oldLineNumber);
+	  foss.outbol = oldbol;
+	  foss.outindex = oldindex;
+	  releaseFileFOSS(stdIO);
+	  --
+	  setStdError(oldStdError);
+	  setstopIfError(oldStopIfError);
 	  setDebuggingMode(oldDebuggingMode);
+	  setInterpreterDepth(oldInterpreterDepth);
+	  setLineNumber(oldLineNumber);
 	  previousLineNumber = -1;
+	  --
 	  Expr(Sequence( when r is err:Error do True else False, toExpr(out) )))
      else WrongArg(1,"a string"));
-setupfun("internalCapture",internalCapture);
+setupfun("capture", capture).Protected = false; -- will be overloaded in m2/examples.m2
 
 normalExit := 0;
 errorExit := 1;
@@ -577,20 +594,27 @@ Exit(err:Error):void := exit(
      else errorExit
      );
 
-header "#include \"startup-header.h\"";
+header "/* Declarations for startup.c, which is generated in Macaulay2/bin */
+typedef struct { const char *filename, *contents; } cached_file;
+extern cached_file startupFile;
+extern cached_file testStrings[];
+extern int num_testStrings;
+/* End of declarations for startup.c */";
+
 export cachedFile := { filename:string, contents:string };
 export startupFile := cachedFile(
      tostring(Ccode(constcharstar,"startupFile.filename")),
      tostring(Ccode(constcharstar,"startupFile.contents")));
 export process():void := (
      localFrame = globalFrame;
-     previousLineNumber = -1;			  -- might have done dumpdata()
-     stdIO .inisatty  =   0 != isatty(0) ;
-     stdIO.echo       = !(0 != isatty(0));
-     stdIO.outisatty =   0 != isatty(1) ;
-     stdError.outisatty =   0 != isatty(2) ;
+     previousLineNumber = -1;
+     stdIO.inisatty  =    0 != isatty(0) ;
+     stdIO.echo      =  !(0 != isatty(0));
+     stdIO.outisatty =    0 != isatty(1) ;
+     stdError.outisatty = 0 != isatty(2) ;
      setstopIfError(false);				    -- this is usually true after loaddata(), we want to reset it
-     sethandleInterrupts(true);
+     sethandleInterrupts(true);				    -- could be overridden in startup.m2
+     setMaxAllowableThreads();
      -- setLoadDepth(loadDepth);				    -- loaddata() in M2lib.c increments it, so we have to reflect that at top level
      everytimeRun();
      -- we don't know the right directory; calls commandInterpreter and eventually returns:
@@ -638,6 +662,37 @@ runBasicTests(e:Expr):Expr := (
      else WrongNumArgs(0)
      else WrongNumArgs(0));
 setupfun("runBasicTests",runBasicTests);
+
+getHistory(e:Expr):Expr := (
+    when e is n:ZZcell do if isInt(n)
+    then toExpr(tostring(getHistory(toInt(n))))
+    else WrongArgSmallInteger()
+    else WrongArgZZ());
+setupfun("getHistory", getHistory);
+
+readHistory(e:Expr):Expr := (
+    when e is filename:stringCell
+    do toExpr(readHistory(tocharstar(expandFileName(filename.v))))
+    else WrongArgString(1));
+setupfun("readHistory", readHistory);
+
+appendHistory(e:Expr):Expr := (
+    when e is s:Sequence do if length(s) != 2 then WrongNumArgs(2) else
+    when s.0 is n:ZZcell do if !isInt(n) then WrongArgSmallInteger(1) else
+    when s.1 is filename:stringCell
+    do toExpr(appendHistory(toInt(n), tocharstar(expandFileName(filename.v))))
+    else WrongArgString(2)
+    else WrongArgZZ(1)
+    else WrongNumArgs(2));
+setupfun("appendHistory", appendHistory);
+
+historyLength(e:Expr):Expr := (
+    when e
+    is s:Sequence do (
+	if length(s) == 0 then toExpr(historyLength())
+	else WrongNumArgs(0))
+    else WrongNumArgs(0));
+setupfun("historyLength", historyLength);
 
 -- Local Variables:
 -- compile-command: "echo \"make: Entering directory \\`$M2BUILDDIR/Macaulay2/d'\" && make -C $M2BUILDDIR/Macaulay2/d interp.o "

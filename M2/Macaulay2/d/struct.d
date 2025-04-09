@@ -1,13 +1,16 @@
 --		Copyright 1994 by Daniel R. Grayson
 use common;
+use util;
 
 reverse(e:Expr):Expr := (
      when e
+     -- # typical value: reverse, BasicList, BasicList
      is a:Sequence do Expr(reverse(a))
      is a:List do Expr(reverse(a))
-     else WrongArg("a list or sequence"));
+     -- # typical value: reverse, String, String
+     is s:stringCell do toExpr(reverse(s.v))
+     else WrongArg("a list, sequence, or string"));
 setupfun("reverse",reverse);
-export seq(e:Expr):Expr := Expr(Sequence(e));
 -- setupfun("singleton",seq);
 export splice(a:Sequence):Sequence := (
      -- warning - this function may return its argument without copying
@@ -33,6 +36,7 @@ export splice(a:Sequence):Sequence := (
      else a);
 export splice(e:Expr):Expr := (
      when e
+     -- # typical value: splice, BasicList, BasicList
      is v:Sequence do Expr(splice(v))
      is a:List do list(
 	  a.Class,
@@ -86,7 +90,10 @@ export toInt(e:Expr):int := (
      -- To fix it, we should have this function, and similar ones, return union types that have to be tested.
      when e 
      is i:ZZcell do toInt(i)
-     else fatal("internal error"));
+     else (
+	  fatal("internal error");
+	  0	     	       	    -- just to satisfy noisy compilers
+	  ));
 export toIntArray(e:Sequence):array(int) := (
      new array(int) len length(e) do foreach x in e do provide toInt(x));
 export toIntArray(e:Expr):array(int) := (
@@ -95,7 +102,7 @@ export toIntArray(e:Expr):array(int) := (
      is b:List do toIntArray(b.v)
      else (
 	  fatal("internal error: toIntArray expected an array of ints");
-	  array(int)()
+	  array(int)()	   	     	  -- just to satisfy noisy compilers
 	  )
      );
 export toArrayExpr(v:array(int)):Sequence := (
@@ -103,7 +110,7 @@ export toArrayExpr(v:array(int)):Sequence := (
      );
 
 export newlist(classs:HashTable,v:Sequence):List := (
-     x := List(classs,v,0,false);
+     x := List(classs,v,hash_t(0),false);
      x.hash = hash(x);
      x);
 export basictype(o:HashTable):HashTable := (

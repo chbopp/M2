@@ -12,6 +12,9 @@ ARingGFFlintBig::ARingGFFlintBig(const PolynomialRing& R, const ring_elem a)
       mCharacteristic(R.characteristic()),
       mGeneratorComputed(false)
 {
+
+  // TODO: assert that the base ring of R is ZZ/p.
+  // TODO: if mDimension <= 1 then give an error.
   ring_elem b = R.copy(a);
   mPrimitiveElement = RingElement::make_raw(&R, b);
   ring_elem minpoly = mOriginalRing.quotient_element(0);
@@ -61,8 +64,8 @@ ARingGFFlintBig::ARingGFFlintBig(const PolynomialRing& R, const ring_elem a)
 ARingGFFlintBig::~ARingGFFlintBig()
 {
   fq_nmod_ctx_clear(mContext);
-  mPrimitiveElement = 0;
-  deletearray(mPPowers);
+  mPrimitiveElement = nullptr;
+  freemem(mPPowers);
   flint_randclear(mRandomState);
 
   if (mGeneratorComputed) fq_nmod_clear(&mCachedGenerator, mContext);

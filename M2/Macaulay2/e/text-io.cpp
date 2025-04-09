@@ -4,11 +4,12 @@
 #include "newdelete.hpp"
 #include <cstdio>
 #include <cstring>
+#include <atomic>
 
 int MAX_LINE_LENGTH = 75;
-int emit_line_len = 0;
+std::atomic_int emit_line_len = 0;
 
-void bignum_text_out(buffer &o, mpz_t a)
+void bignum_text_out(buffer &o, mpz_srcptr a)
 {
   char s[1000];
   char *str;
@@ -19,7 +20,7 @@ void bignum_text_out(buffer &o, mpz_t a)
   str = mpz_get_str(allocstr, 10, a);
   o << str;
 
-  if (size > 1000) deletearray(allocstr);
+  if (size > 1000) freemem(allocstr);
 }
 
 void clear_emit_size() { emit_line_len = 0; }

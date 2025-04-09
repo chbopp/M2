@@ -3,10 +3,11 @@
 #ifndef _aring_zz_flint_hpp_
 #define _aring_zz_flint_hpp_
 
+#include "interface/gmp-util.h"  // for mpz_reallocate_limbs
+
 #include "aring.hpp"
 #include "buffer.hpp"
 #include "ringelem.hpp"
-#include <iosfwd>
 #include "exceptions.hpp"
 #include "ZZ.hpp"
 
@@ -15,7 +16,8 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <flint/arith.h>
+#include <flint/flint.h>  // for flint_rand_t, fmpz, fmpz_t
+#include <flint/fmpz.h>   // for fmpz_set_si, fmpz_pow_ui, fmpz_set_mpz
 #pragma GCC diagnostic pop
 
 namespace M2 {
@@ -25,7 +27,7 @@ namespace M2 {
    @brief wrapper for the flint fmpz_t integer representation
 */
 
-class ARingZZ : public RingInterface
+class ARingZZ : public SimpleARing<ARingZZ>
 {
  public:
   static const RingID ringID = ring_ZZFlint;
@@ -81,7 +83,7 @@ class ARingZZ : public RingInterface
   }
 
   void init(ElementType& result) const { fmpz_init(&result); }
-  void clear(ElementType& result) const { fmpz_clear(&result); }
+  static void clear(ElementType& result) { fmpz_clear(&result); }
   void set(ElementType& result, const ElementType& a) const
   {
     fmpz_set(&result, &a);
@@ -93,13 +95,13 @@ class ARingZZ : public RingInterface
     fmpz_set_si(&result, a);
   }
 
-  void set_from_mpz(ElementType& result, const mpz_ptr a) const
+void set_from_mpz(ElementType& result, mpz_srcptr a) const
   {
     // printf("ARingZZ::calling set_from_mpz\n");
     fmpz_set_mpz(&result, a);
   }
 
-  bool set_from_mpq(ElementType& result, const mpq_ptr a) const
+  bool set_from_mpq(ElementType& result, mpq_srcptr a) const
   {
     if (mpz_cmp_si(mpq_denref(a), 1) == 0)
       {
@@ -174,14 +176,14 @@ class ARingZZ : public RingInterface
              const ElementType& a,
              const unsigned long n) const
   {
-    assert(n >= 0);
     return fmpz_pow_ui(&result, &a, n);
   }
 
   void power_mpz(ElementType& result,
                  const ElementType& a,
-                 const mpz_ptr n) const
+                 mpz_srcptr n) const
   {
+    if (mpz_sgn(n) < 0) throw exc::engine_error("can only raise to a nonnegative power");
     std::pair<bool, int> n1 = RingZZ::get_si(n);
     if (n1.first)
       fmpz_pow_ui(&result, &a, n1.second);
@@ -220,15 +222,21 @@ class ARingZZ : public RingInterface
 
   void to_ring_elem(ring_elem& result, const ElementType& a) const
   {
-    fmpz b;
-    fmpz_init_set(&b, &a);
-    result.poly_val = reinterpret_cast<Nterm*>(b);
+    mpz_ptr b = getmemstructtype(mpz_ptr);
+    mpz_init(b);
+    fmpz_get_mpz(b, &a);
+    mpz_reallocate_limbs(b);
+    result = ring_elem(b);
   }
 
   void from_ring_elem(ElementType& result, const ring_elem& a) const
   {
-    fmpz t = reinterpret_cast<fmpz>(const_cast<Nterm*>(a.poly_val));
-    fmpz_set(&result, &t);
+    fmpz_set_mpz(&result, a.get_mpz());
+  }
+
+  ElementType from_ring_elem_const(const ring_elem& a) const
+  {
+    return PTR_TO_COEFF(a.get_mpz());
   }
 
   /** @} */

@@ -5,15 +5,47 @@
 #ifndef _nag_
 #define _nag_
 
-#include "buffer.hpp"
-#include "matrix.hpp"
-#include "aring-CC.hpp"
-#include "complex.h"
-#include "style.hpp"
-#include "aring-glue.hpp"
-#include "SLP.hpp"
+#include "engine-includes.hpp"
 
+#include <algorithm>
+#include <assert.h>
 #include <map>
+#include <math.h>
+#include <memory>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <utility>
+#include <vector>
+
+#include "interface/NAG.h"
+#include "matrix.hpp"
+#include "SLP.hpp"
+#include "aring-CC.hpp"
+#include "aring-glue.hpp"
+#include "aring.hpp"
+#include "buffer.hpp"
+#include "error.h"
+#include "hash.hpp"
+#include "newdelete.hpp"
+#include "ring.hpp"
+#include "ringelem.hpp"
+
+class Matrix;
+class PointArray;
+class PolyRing;
+class SLProgram;
+
+class M2PointArray : public MutableEngineObject
+{
+  std::unique_ptr<PointArray> mPointArray;
+public:
+  M2PointArray(PointArray* pa) : mPointArray(pa) {}
+
+  PointArray& value() { return *mPointArray; }
+};
+
 // PointArray
 class PointArray
 {
@@ -34,6 +66,9 @@ class PointArray
         mWeights.push_back(r);
       }
     for (int i = 0; i < n; i++) mWeights[i] /= s;
+  }
+  virtual ~PointArray() {
+    // std::cerr << "entering ~PointArray()" << std::endl;
   }
   int lookup_or_append(const RealVector& a)
   {
@@ -104,33 +139,18 @@ inline const CCC* cast_to_CCC(const Ring* R)
 
 inline ring_elem from_doubles(const CCC* C, double re, double im)
 {
-  CCC::ElementType a;
-  C->ring().init(a);
+  M2::ARingCC::Element a(C->ring());
   C->ring().set_from_doubles(a, re, im);
   ring_elem result;
   C->ring().to_ring_elem(result, a);
-  C->ring().clear(a);
   return result;
 }
-/*
-inline ring_elem from_BigReals(const CCC* C, gmp_RR re, gmp_RR im)
-{
-  CCC::ElementType a;
-  C->ring().init(a);
-  C->ring().set_from_BigReals(a,re,im);
-  ring_elem result;
-  C->ring().to_ring_elem(result,a);
-  C->ring().clear(a);
-  return result;
-}
-*/
+
 inline gmp_CC toBigComplex(const CCC* C, ring_elem a)
 {
-  CCC::ElementType b;
-  C->ring().init(b);
+  M2::ARingCC::Element b(C->ring());
   C->ring().from_ring_elem(b, a);
   gmp_CC result = C->ring().toBigComplex(b);
-  C->ring().clear(b);
   return result;
 }
 ///////////////////////////////////////////////////////////////////////////
@@ -160,7 +180,7 @@ class complex
   double getimaginary() const;
   bool operator==(complex);
   void operator=(complex);
-  void sprint(char*);
+  void snprint(char*, int);
 };
 
 //                                        CONSTRUCTOR
@@ -186,8 +206,8 @@ inline complex::complex(const complex& c)
 
 inline complex::complex(gmp_CC mpfrCC)
 {
-  real = mpfr_get_d(mpfrCC->re, GMP_RNDN);
-  imag = mpfr_get_d(mpfrCC->im, GMP_RNDN);
+  real = mpfr_get_d(mpfrCC->re, MPFR_RNDN);
+  imag = mpfr_get_d(mpfrCC->im, MPFR_RNDN);
 }
 
 inline void complex::operator=(complex c)
@@ -281,176 +301,11 @@ inline bool complex::operator==(complex c)
   return (real == c.real) && (imag == c.imag) ? 1 : 0;
 }
 
-inline void complex::sprint(char* s)
+inline void complex::snprint(char* s, int N)
 {
-  sprintf(s, "(%lf) + i*(%lf)", real, imag);
+  snprintf(s, N, "(%lf) + i*(%lf)", real, imag);
 }
 
-/**
- Arbitrary precision complex numbers
- */
-class complexAP
-{
- public:  //!!!
-  // private:
-  gmp_CC_struct value;
-
- public:
-  void init() { mpfc_init(&value, 53); }
-  complexAP();
-  // complexAP(double);
-  complexAP(double, double);
-  complexAP(double);
-  complexAP(const complexAP&);
-  complexAP(const complex&);
-  complexAP(gmp_CC_struct*);
-  ~complexAP() { mpfc_clear(&value); }
-  complexAP operator+(complexAP);
-  complexAP operator-(complexAP);
-  complexAP operator-();
-  complexAP operator*(complexAP);
-  complexAP operator/(complexAP);
-  complexAP& operator+=(complexAP);
-  complexAP getconjugate();
-  complexAP getreciprocal();
-  double getmodulus();
-  double getreal() const;
-  double getimaginary() const;
-  bool operator==(complexAP);
-  void operator=(complexAP);
-  void sprint(char*);
-  void print();
-  complex to_complex() const;
-};
-
-//                                        CONSTRUCTOR
-inline complexAP::complexAP() { init(); }  //!!! double precision
-inline complexAP::complexAP(double r)
-{
-  init();
-  mpfr_set_d(value.re, r, GMP_RNDN);
-  mpfr_set_d(value.im, 0, GMP_RNDN);
-}
-
-inline complexAP::complexAP(double re, double im)
-{
-  init();
-  mpfr_set_d(value.re, re, GMP_RNDN);
-  mpfr_set_d(value.im, im, GMP_RNDN);
-}
-
-//                                 COPY CONSTRUCTOR
-inline complexAP::complexAP(const complexAP& c)
-{
-  mpfc_init_set(&value, (gmp_CC_struct*)&c.value);
-}
-
-inline complexAP::complexAP(const complex& c)
-{
-  init();
-  *this = complexAP(c.getreal(), c.getimaginary());
-}
-
-inline complexAP::complexAP(gmp_CC_struct* mpfrCC)
-{
-  mpfc_init_set(&value, mpfrCC);
-}
-
-inline void complexAP::operator=(complexAP c) { mpfc_set(&value, &c.value); }
-inline complexAP complexAP::operator+(complexAP c)
-{
-  complexAP tmp;
-  mpfc_add(&tmp.value, &value, &c.value);
-  return tmp;
-}
-
-inline complexAP& complexAP::operator+=(complexAP c)
-{
-  mpfc_add(&value, &value, &c.value);
-  return *this;
-}
-
-inline complexAP complexAP::operator-(complexAP c)
-{
-  complexAP tmp;
-  mpfc_sub(&tmp.value, &value, &c.value);
-  return tmp;
-}
-
-inline complexAP complexAP::operator-()
-{
-  complexAP tmp(0, 0);
-  return tmp - *this;
-}
-
-inline complexAP complexAP::operator*(complexAP c)
-{
-  complexAP tmp;
-  mpfc_mul(&tmp.value, &value, &c.value);
-  return tmp;
-}
-
-inline complexAP complexAP::operator/(complexAP c)
-{
-  complexAP tmp;
-  mpfc_div(&tmp.value, &value, &c.value);
-  return tmp;
-}
-
-inline complexAP complexAP::getconjugate()
-{
-  complexAP tmp;
-  mpfc_conj(&tmp.value, &value);
-  return tmp;
-}
-
-/*
-inline complexAP complexAP::getreciprocal()
-{
-  complexAP t;
-  t.real=real;
-  t.imag=imag * -1;
-  double div;
-  div=(real*real)+(imag*imag);
-  t.real/=div;
-  t.imag/=div;
-  return t;
-}
-
-inline double complexAP::getmodulus()
-{
-  double z;
-  z=(real*real)+(imag*imag);
-  z=sqrt(z);
-  return z;
-}
-*/
-inline double complexAP::getreal() const
-{
-  return mpfr_get_d(value.re, MPFR_RNDN);
-}
-
-inline double complexAP::getimaginary() const
-{
-  return mpfr_get_d(value.im, MPFR_RNDN);
-}
-
-inline bool complexAP::operator==(complexAP c)
-{
-  complexAP tmp;
-  mpfc_sub(&tmp.value, &value, &c.value);
-  return mpfc_is_zero(&tmp.value);
-}
-
-inline void complexAP::sprint(char* s)
-{
-  sprintf(s, "(%lf) + i*(%lf)", getreal(), getimaginary());
-}
-
-inline complex complexAP::to_complex() const
-{
-  return complex(getreal(), getimaginary());
-}
 
 /**
    Array manipulating functions
@@ -539,7 +394,7 @@ double norm2_complex_array(int n,
 #define MAX_NUM_PATH_TRACKERS 10
 
 /* Conventions in relative_position SLPs:
-   nodes are refered via negative integers;
+   nodes are referred via negative integers;
    i-th input --> i;
    i-th constant --> i + CONST_OFFSET. */
 
@@ -547,12 +402,6 @@ class ComplexField
 {
  public:
   typedef complex element_type;
-};
-
-class ComplexFieldArbitraryPrecision
-{
- public:
-  typedef complexAP element_type;
 };
 
 template <typename R>
@@ -576,8 +425,8 @@ class SLP : public MutableEngineObject
   bool is_relative_position;  // can use relative or absolute addressing
   M2_arrayint program;        // std::vector???
   element_type* nodes;        // array of CCs
-  intarray node_index;  // points to position in program (rel. to start) of
-                        // operation correspoding to a node
+  gc_vector<int> node_index;  // points to position in program (rel. to start)
+                              // of operation corresponding to a node
   int num_consts, num_inputs, num_operations, rows_out, cols_out;
 
   void* handle;  // dynamic library handle
@@ -589,15 +438,15 @@ class SLP : public MutableEngineObject
 
   static void make_nodes(element_type*&, int size);
   int poly_to_horner_slp(int n,
-                         intarray& prog,
-                         VECTOR(element_type) & consts,
+                         gc_vector<int>& prog,
+                         gc_vector<element_type>& consts,
                          Nterm*& f);  // used by make
 
-  int diffNodeInput(int n, int v, intarray& prog);  // used by jacobian
+  int diffNodeInput(int n, int v, gc_vector<int>& prog);  // used by jacobian
   int diffPartReference(int n,
                         int ref,
                         int v,
-                        intarray& prog);  // used by diffNodeInput
+                        gc_vector<int>& prog);  // used by diffNodeInput
 
   /* obsolete!!!
   void predictor(); // evaluates a predictor
@@ -636,9 +485,6 @@ class SLP : public MutableEngineObject
   Matrix* evaluate(const Matrix* vals);
 };
 
-#define SLPdouble
-//#define SLPmpfr
-#ifdef SLPdouble
 /** Wrapper for SLP: eventually should be replaced
 */
 class StraightLineProgram : public SLP<ComplexField>
@@ -678,51 +524,6 @@ class StraightLineProgram : public SLP<ComplexField>
   void evaluate(int n, const element_type* values, element_type* out);
   Matrix* evaluate(const Matrix* vals);
 };
-#endif
-#ifdef SLPmpfr
-/** same but AP
-*/
-class StraightLineProgram : public SLP<ComplexFieldArbitraryPrecision>
-{
- public:
-  static StraightLineProgram /* or null */* make(const PolyRing* R,
-                                                 ring_elem e);
-  static StraightLineProgram /* or null */* make(const Matrix* consts,
-                                                 M2_arrayint program);
-
-  StraightLineProgram /* or null */* concatenate(const StraightLineProgram* slp)
-  {
-    return static_cast<StraightLineProgram*>(
-        SLP<ComplexFieldArbitraryPrecision>::concatenate(slp));
-  }
-
-  StraightLineProgram /* or null */* jacobian(bool makeHxH,
-                                              StraightLineProgram*& slpHxH,
-                                              bool makeHxtH,
-                                              StraightLineProgram*& slpHxtH)
-  {
-    SLP<ComplexFieldArbitraryPrecision> *SLP1, *SLP2;
-    StraightLineProgram* ret = static_cast<StraightLineProgram*>(
-        SLP<ComplexFieldArbitraryPrecision>::jacobian(
-            makeHxH, SLP1, makeHxtH, SLP2));
-    slpHxH = static_cast<StraightLineProgram*>(SLP1);
-    slpHxtH = static_cast<StraightLineProgram*>(SLP2);
-    return ret;
-  }
-
-  StraightLineProgram /* or null */* copy()
-  {
-    return static_cast<StraightLineProgram*>(
-        SLP<ComplexFieldArbitraryPrecision>::copy());
-  }
-
-  void text_out(buffer& o) const;
-  // void stats_out(buffer& o) const;
-  void evaluate(int n, const element_type* values, element_type* out);
-  void evaluate(int n, const complex* values, complex* out);
-  Matrix* evaluate(const Matrix* vals);
-};
-#endif
 
 // enum SolutionStatus { ... defined in SLP-imp.hpp ... };
 struct Solution
@@ -737,12 +538,11 @@ struct Solution
 
   Solution() { status = UNDETERMINED; }
   void make(int m, const complex* s_s);
-  void make(int m, const complexAP* s_s);
   ~Solution() { release(); }
   void release()
   {
-    deletearray(x);
-    deletearray(start_x);
+    freemem(x);
+    freemem(start_x);
   }
 };
 
@@ -795,8 +595,8 @@ class PathTracker : public MutableEngineObject
             *(Hxt + i * n + j) = tt;
           }
         *(Hxt + n * n + n - 1) = complex(0.);  // last row and column
-        deletearray(SxS);
-        deletearray(TxT);
+        freemem(SxS);
+        freemem(TxT);
       }
     else
       slpHxt->evaluate(n + 1, x0t0, Hxt);

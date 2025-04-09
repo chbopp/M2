@@ -12,9 +12,10 @@ newPackage(
 	     {Name => "Charley Crissman", Email => "charleyc@math.berkeley.edu", HomePage => "http://math.berkeley.edu/~charleyc/"}
 	     },
 	HomePage => "http://www.math.uiuc.edu/Macaulay2/",
-    	Headline => "computations of characteristic classes for varieties without equations",
+    	Headline => "characteristic classes for varieties without equations",
+	Keywords => {"Intersection Theory"},
         DebuggingMode => false,
-	PackageImports => {"SchurRings","PushForward"}
+	PackageImports => {"SchurRings","PushForward","Varieties"}
     	)
 
 schurVersion = value SchurRings.Options.Version
@@ -22,9 +23,9 @@ schurVersion = value SchurRings.Options.Version
 if  schurVersion < 0.5 then protect EorH
 
 export { "AbstractSheaf", "abstractSheaf", "AbstractVariety", "abstractVariety", "schubertCycle'", "schubertCycle", "ReturnType",
-     "AbstractVarietyMap", "adams", "Base", "blowup", "BundleRanks", "Bundles", "VarietyDimension", "Bundle",
+     "AbstractVarietyMap", "adams", "blowup", "BundleRanks", "Bundles", "VarietyDimension", "Bundle",
      "TautologicalLineBundle", "ch", "chern", "ChernCharacter", "ChernClass", "ChernClassVariable", "ctop", "exceptionalDivisor", "FlagBundle",
-     "flagBundle", "projectiveBundle'", "projectiveBundle", "projectiveSpace'", "projectiveSpace", "PP'", "PP", "integral", "IntersectionRing",
+     "flagBundle", "projectiveBundle'", "projectiveBundle", "abstractProjectiveSpace'", "abstractProjectiveSpace", "integral", "IntersectionRing",
      "intersectionRing", "Rank","PullBack", "ChernClassVariableTable",
      "schur", "SectionClass", "sectionClass", "segre", "StructureMap", "TangentBundle", "tangentBundle", "cotangentBundle", "todd",
      "sectionZeroLocus", "degeneracyLocus", "degeneracyLocus2", "kernelBundle",
@@ -229,7 +230,7 @@ abstractSheaf = method(
 	  Name => null,
 	  ChernClass => null,
 	  ChernCharacter => null,
-	  Rank => null,
+	  Rank => null
 	  })
 abstractSheaf AbstractVariety := opts -> X -> (
      local ch; local rk;
@@ -284,11 +285,11 @@ abstractVariety(ZZ,Ring) := opts -> (d,A) -> (
 	  then x -> part(d,x)
 	  else x -> (hold integral) part(d,x)
 	  );	  
-     A.Variety = new opts#ReturnType from { global dim => d, IntersectionRing => A })
+     A.variety = new opts#ReturnType from { global dim => d, IntersectionRing => A })
 
 -- The DefaultPullBack option has two effects:
 -- 1) if the given pullback method does not provide a method for pulling back integers and rationals, it installs the default one (promotion)
--- 2) the default pullback method for sheaves is installed (pulling back chern classes/characters)
+-- 2) the default pullback method for sheaves is installed (pulling back Chern classes/characters)
 --    Note: this OVERRIDES any special method for pullbacks; you must set this option to false if you want to give your own method
 -- The DefaultPushForward option is the same, except only part (2) above applies.
 abstractVarietyMap = method(TypicalValue => AbstractVarietyMap, Options => {DefaultPullBack => true, DefaultPushForward => true, SectionClass => null, TangentBundle => null})
@@ -502,7 +503,7 @@ ChernClassVariable .. ChernClassVariable := (a,b) -> (
 
 installMethod(symbol _, OO, RingElement, AbstractSheaf => (OO,D) -> (
 	  if D != 0 and degree D != {1} then error "expected a cycle class of degree 1 (a divisor class)";
-	  1 - OO_(variety D)(-D)))
+	  1 - OO_(variety ring D)(-D)))
 installMethod(symbol _, OO, AbstractVariety, AbstractSheaf => 
      (OO,X) -> (
 	  A := intersectionRing X;
@@ -552,8 +553,6 @@ AbstractSheaf ^** QQ := AbstractSheaf ^** RingElement := AbstractSheaf => (E,n) 
 
 rank AbstractSheaf := RingElement => E -> E.cache.rank
 variety AbstractSheaf := AbstractVariety => E -> E.AbstractVariety
-variety Ring := AbstractVariety => R -> R.Variety
-variety RingElement := AbstractVariety => r -> variety ring r
 
 tangentBundle FlagBundle := (stashValue TangentBundle) (FV -> tangentBundle FV.Base + tangentBundle FV.StructureMap)
 
@@ -591,10 +590,13 @@ flagBundle(List,AbstractSheaf) := opts -> (bundleRanks,E) -> (
      bundleRanks' := bundleRanks;			    -- the original list of bundle ranks
      n' := #bundleRanks';
      rk := rank E;
-     if part(rk+1,infinity,chern E) != 0 then error "expected an effective bundle (with vanishing higher Chern classes)";
+     ---- We don't have equations in the "base" that for all monomials in the Chern classes of degree greater than the dimension,
+     ---- so some things will not appear to vanish.
+     -- if part(rk+1,infinity,chern E) != 0 then error "expected an effective bundle (with vanishing higher Chern classes)";
      if opts.Isotropic then (
 	  if not even rk then error "flagBundle, isotropic case: expected bundle of even rank";
-	  if not all(1 .. rk//2, i -> part(2*i-1, chern E) == 0) then error "flagBundle, isotropic case: expected bundle with vanishing odd Chern classes";
+          -- Same here:
+	  -- if not all(1 .. rk//2, i -> part(2*i-1, chern E) == 0) then error "flagBundle, isotropic case: expected bundle with vanishing odd Chern classes";
 	  );
      rk2 := if opts.Isotropic then rk//2 else rk;
      omittedVariables := null;
@@ -703,7 +705,7 @@ flagBundle(List,AbstractSheaf) := opts -> (bundleRanks,E) -> (
      -- use C;
      C#"hilbert Function hint" = hilbertSeriesHint;
      d := dim X + sum(n, i -> sum(i+1 .. n-1, j -> bundleRanks#i * bundleRanks#j));
-     FV := C.Variety = abstractVariety(d,C,ReturnType => FlagBundle);
+     FV := abstractVariety(d,C,ReturnType => FlagBundle);
      FV.BundleRanks = bundleRanks;
      FV.Rank = rk;
      FV.Base = X;
@@ -763,16 +765,13 @@ projectiveBundle ZZ := opts -> n -> flagBundle({1,n},opts)
 projectiveBundle(ZZ,AbstractVariety) := opts -> (n,X) -> flagBundle({1,n},X,opts)
 projectiveBundle AbstractSheaf := opts -> E -> flagBundle({1, rank E - 1},E,opts)
 
-projectiveSpace' = method(Options => { VariableName => "h" }, TypicalValue => FlagBundle)
-projectiveSpace' ZZ := opts -> n -> flagBundle({n,1},VariableNames => {,{fixvar opts.VariableName}})
-projectiveSpace'(ZZ,AbstractVariety) := opts -> (n,X) -> flagBundle({n,1},X,VariableNames => {,{fixvar opts.VariableName}})
+abstractProjectiveSpace' = method(Options => { VariableName => "h" }, TypicalValue => FlagBundle)
+abstractProjectiveSpace' ZZ := opts -> n -> flagBundle({n,1},VariableNames => {,{fixvar opts.VariableName}})
+abstractProjectiveSpace'(ZZ,AbstractVariety) := opts -> (n,X) -> flagBundle({n,1},X,VariableNames => {,{fixvar opts.VariableName}})
 
-projectiveSpace = method(Options => { VariableName => "h" }, TypicalValue => FlagBundle)
-projectiveSpace ZZ := opts -> n -> flagBundle({1,n},VariableNames => {{fixvar opts.VariableName},})
-projectiveSpace(ZZ,AbstractVariety) := opts -> (n,X) -> flagBundle({1,n},X,VariableNames => {{fixvar opts.VariableName},})
-
-PP'  = new ScriptedFunctor from { superscript => i -> projectiveSpace' i }
-PP = new ScriptedFunctor from { superscript => i -> projectiveSpace i }
+abstractProjectiveSpace = method(Options => { VariableName => "h" }, TypicalValue => FlagBundle)
+abstractProjectiveSpace ZZ := opts -> n -> flagBundle({1,n},VariableNames => {{fixvar opts.VariableName},})
+abstractProjectiveSpace(ZZ,AbstractVariety) := opts -> (n,X) -> flagBundle({1,n},X,VariableNames => {{fixvar opts.VariableName},})
 
 bundles = method()
 bundles FlagBundle := X -> X.Bundles
@@ -862,7 +861,7 @@ multiFlag(List,List) := (bundleRanks, bundles) -> (
 	  if not sum(bundleRanks#i) == rank bundles#i then error "expected rank of bundle to equal sum of bundle ranks");
      varNames := apply(0 .. n-1, i -> apply(1 .. #(bundleRanks#i), bundleRanks#i, (j,r) ->(
 		    apply(toList(1..r), k -> new IndexedVariable from {K,(i+1,j,k)}))));
-     --i -> base bundle, j -> bundle in flag from base bundle, k -> chern class
+     --i -> base bundle, j -> bundle in flag from base bundle, k -> Chern class
      Ord := GRevLex;
      dgs := splice flatten apply(bundleRanks, l -> apply(l, r-> 1 .. r));
      S := intersectionRing X;
@@ -885,7 +884,7 @@ multiFlag(List,List) := (bundleRanks, bundles) -> (
      C := B; H := identity;
      d := dim X + sum(bundleRanks, l-> (
 	       sum(0 .. #l-1, i-> sum(0 .. i-1, j-> l#i * l#j))));
-     MF := C.Variety = abstractVariety(d,C);
+     MF := abstractVariety(d,C);
      MF.Base = X;
      MF.Bundles = apply(0 .. n-1, l -> (
 	         	       apply(0 .. #(bundleRanks#l)-1, i -> (
@@ -1097,7 +1096,7 @@ blowup(AbstractVarietyMap) :=
      n := numgens BasAModule;
      -- the fundamental idea: we build the Chow ring of the blowup as an algebra over A
      -- we introduce one algebra generator per basis element of B over A, and we let the first generator, E_0, play a special role:
-     -- if z is the first chern class of OO_PN(-1), we think of E_0^j * E_i as z^j E_i.  In particular, E_0 itself we identify with 1_B.
+     -- if z is the first Chern class of OO_PN(-1), we think of E_0^j * E_i as z^j E_i.  In particular, E_0 itself we identify with 1_B.
      -- For this to work, we are depending on the ordering of pushFwd: the element 1_B must be the first generator returned!
      
      --The setup below will break if we ever end up with multigraded Chow rings, because pushFwd does not properly support multigraded maps
@@ -1165,7 +1164,7 @@ blowup(AbstractVarietyMap) :=
      Ytilde.TangentBundle = abstractSheaf(Ytilde,
 	  Rank => dim Y,
 	  ChernClass => promote(chern(tangentBundle Y), D) + jLower (chern(g^* tangentBundle X) * alpha),
-          ChernCharacter => ch tangentBundle Y - jLower(ch(dual first bundles PN) * (todd OO(-x))^-1));
+          ChernCharacter => ch tangentBundle Y - jLower(ch dual first bundles PN * todd (- OO(-x))));
      -- to pull back a class from the blowup to PN we take E_i to -x*alphas#i; this corresponds to
      -- the fact that pushing forward and then pulling back a class on PN is the same as multiplying by x = c_1(O(1))
      jUpper := map(C, D, (for i from 0 to n-1 list -x * alphas#i) | flatten entries promote(iuppermatrix,C));
@@ -1315,15 +1314,15 @@ inclusion = method(
      Options => {SubDimension => null, -- dimension of the subvariety
 	  SuperDimension => null, -- dimension of the containing variety
 	  Codimension => null,
-	  SubTangent => null, -- chern class of the tangent bundle of the subvariety
-	  SuperTangent => null, -- chern class of the tangent bundle of the containing variety
-	  NormalClass => null, -- chern class of the normal bundle of the inclusion
+	  SubTangent => null, -- Chern class of the tangent bundle of the subvariety
+	  SuperTangent => null, -- Chern class of the tangent bundle of the containing variety
+	  NormalClass => null, -- Chern class of the normal bundle of the inclusion
 	  Base => null -- the ring or variety to use as the base
 	  })
 inclusion(RingMap) := opts -> (f) -> (
      -- f: A -> B ring map, pullback map from "approx Chow rings" of Y to X
-     -- c: chern class of normal bundle, elt of B
-     -- tY: chern class of tangent bundle of Y, elt of A
+     -- c: Chern class of normal bundle, elt of B
+     -- tY: Chern class of tangent bundle of Y, elt of A
      
      A := source f;
      B := target f;
@@ -1390,7 +1389,7 @@ inclusion(RingMap) := opts -> (f) -> (
 	  );     
      try c = promote(c,B);
      if not instance(c,B) then error "Expected an element promotable to the target of first argument"; 
-     if not part(0,c) == 1_B then error "Expected first chern class of normal bundle to be 1";
+     if not part(0,c) == 1_B then error "Expected first Chern class of normal bundle to be 1";
      -- may wish to assert that c_k = 0 for k > r
 
      try tY = promote(tY,A);
@@ -1446,12 +1445,12 @@ reciprocal RingElement := (A) -> (
 logg = method(TypicalValue => RingElement)
 logg QQ := logg ZZ := (n) -> 0
 logg RingElement := (C) -> (
-     -- C is the total chern class in an intersection ring A
-     -- The chern character of C is returned.
+     -- C is the total Chern class in an intersection ring A
+     -- The Chern character of C is returned.
      A := ring C;
      d := A.VarietyDimension;
      p := new MutableList from splice{d+1:0}; -- p#i is (-1)^i * (i-th power sum of chern roots)
-     e := for i from 0 to d list part(i,C); -- elem symm functions in the chern roots
+     e := for i from 0 to d list part(i,C); -- elem symm functions in the Chern roots
      for n from 1 to d do
          p#n = -n*e#n - sum for j from 1 to n-1 list e#j * p#(n-j);
      promote(sum for i from 1 to d list 1/i! * (-1)^i * p#i, A))
@@ -1459,8 +1458,8 @@ logg RingElement := (C) -> (
 expp = method(TypicalValue => RingElement)
 expp QQ := expp ZZ := (n) -> 1
 expp RingElement := (y) -> (
-     -- y is the chern character
-     -- the total chern class of y is returned
+     -- y is the Chern character
+     -- the total Chern class of y is returned
      A := ring y;
      d := A.VarietyDimension;
      p := for i from 0 to d list (-1)^i * i! * part(i,y);
@@ -1476,8 +1475,8 @@ todd AbstractSheaf := E -> todd' ch E
 todd AbstractVariety := X -> todd tangentBundle X
 todd AbstractVarietyMap := p -> todd tangentBundle p
 todd' = (r) -> (
-     -- r is the chern character
-     -- the (total) todd class is returned
+     -- r is the Chern character
+     -- the (total) Todd class is returned
      A := ring r;
      if not A.?VarietyDimension then error "expected a ring with its variety dimension set";
      if r == 0 then return 1_A;
@@ -1579,12 +1578,12 @@ AbstractSheaf * AbstractSheaf := AbstractSheaf => (
 	  else abstractSheaf(X, ChernCharacter => part(0,dim X,f*g)))
      ) @@ coerce
 
-Hom(AbstractSheaf, AbstractSheaf) := AbstractSheaf => (F,G) -> dual F ** G
+Hom(AbstractSheaf, AbstractSheaf) := AbstractSheaf => o -> (F,G) -> dual F ** G
 
 det AbstractSheaf := AbstractSheaf => opts -> (F) -> abstractSheaf(variety F, Rank => 1, ChernClass => 1 + part(1,ch F))
 
 computeWedges = (n,A,d) -> (
-     -- compute the chern characters of wedge(i,A), for i = 0..n, given a chern character, truncating above degree d
+     -- compute the Chern characters of wedge(i,A), for i = 0..n, given a Chern character, truncating above degree d
      wedge := new MutableList from splice{0..n};
      wedge#0 = 1_(ring A);
      wedge#1 = A;
@@ -1594,7 +1593,7 @@ computeWedges = (n,A,d) -> (
      )
 
 exteriorPower(ZZ, AbstractSheaf) := AbstractSheaf => opts -> (n,E) -> (
-     -- wedge is an array 0..n of the chern characters of the exerior 
+     -- wedge is an array 0..n of the Chern characters of the exterior 
      -- powers of E.  The last one is what we want.
 
      -- this line of code is incorrect for virtual bundles:
@@ -1747,7 +1746,7 @@ diagrams(ZZ,ZZ,ZZ) := (k,n,d) -> (--partitions of d of above form
 toSchubertBasis = method()
 toSchubertBasis(RingElement) := c -> (
      --by Charley Crissman
-     try G := variety c else error "expected an element of an intersection ring"; 
+     try G := variety ring c else error "expected an element of an intersection ring";
      (S,T,U) := schubertRing(G);
      T c
      )
@@ -1768,14 +1767,14 @@ schubertRing(FlagBundle) := G -> (
           (k,q) := toSequence(G.BundleRanks);
           P := diagrams(q,k);
           M := apply(P, i-> schubertCycle(i,G));
-          E := flatten entries basis(R);
+          E := flatten entries basis(R, Variables => 0 .. numgens R - 1);
           local T';
 	  T := transpose matrix apply (M, i -> apply(E, j-> coefficient(j,i))); --matrix converting from schu-basis 
                                                                  --to h-basis
 	  T' = T^-1; --matrix converting from h-basis to s-basis
           local S;
 	  s := local s;
-	  S = B[apply(P, i-> s_i)]; --poly ring with generators <=> schubert basis elts
+	  S = B[apply(P, i-> s_i)]; --poly ring with generators <=> Schubert basis elts
 	  S.cache = new CacheTable;
 	  S#{Standard,AfterPrint} = X -> (
 	       << endl;

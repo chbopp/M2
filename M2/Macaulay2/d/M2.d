@@ -1,8 +1,9 @@
 -- Copyright 2010 by Daniel R. Grayson
-declarations "
-#include <M2/config.h>
-";
+
+declarations "#include <M2/config.h>";
+
 use arithmetic;
+
 export string := array(char);
 export arrayint := array(int);
 export arrayintOrNull := array(int) or null;
@@ -14,12 +15,11 @@ export ucharstar := atomicPointer "unsigned char *";
 export charstarstar := Pointer "char **";
 export constcharstar := atomicPointer "const char *";
 export constucharstar := atomicPointer "const unsigned char *";
-export constcharstarstar := Pointer "const char **";
+export constcharstarstar := Pointer "const char * const *";
 export charstarOrNull := charstar or null;
 export constcharstarOrNull := constcharstar or null;
 export constucharstarOrNull := constucharstar or null;
 export constcharstarstarOrNull := constcharstarstar or null;
-const(x:charstar):constcharstar := Ccode(constcharstar,x);
 const(x:charstarOrNull):constcharstarOrNull := Ccode(constcharstarOrNull,x);
 
 header "#include <M2mem.h>";
@@ -43,22 +43,17 @@ export makearrayint(n:int):arrayint := Ccode(returns, "
   GC_CHECK_CLOBBER(z);
   return z; /* Note that getmem_atomic returns zeroed memory */
 ");
-export tocharstar(s:string):charstar := Ccode(returns, "
-  char *p = getmem_atomic(s->len + 1);
-  memcpy(p,s->array,s->len);
-  p[s->len] = 0;
+export tocharstarn(s:string, n:int):charstar := Ccode(returns, "
+  char *p = getmem_atomic(", n + 1, ");
+  memcpy(p,s->array,", n, ");
+  p[", n, "] = 0;
   GC_CHECK_CLOBBER(p);
   return p;
 ");
-export tocharstarOrNull(s:string):charstarOrNull := Ccode(returns, "
-  char *p;
-  if (s->len == 0) return NULL;
-  p = getmem_atomic(s->len + 1);
-  memcpy(p,s->array,s->len);
-  p[s->len] = 0;
-  GC_CHECK_CLOBBER(p);
-  return p;
-");
+export tocharstar(s:string):charstar := tocharstarn(s, length(s));
+export tocharstarOrNull(s:string):charstarOrNull := (
+    if length(s) == 0 then charstarOrNull(null())
+    else charstarOrNull(tocharstar(s)));
 export tostringn(s:charstar,n:int):string := Ccode(returns, "
   M2_string p = (M2_string)getmem_atomic(sizeofarray(p,n));
   p->len = n;
@@ -77,7 +72,7 @@ export join(x:string,y:string):string := Ccode(returns, "
 ");
 export tocharstarstar(p:ArrayString):charstarstar := (
      Ccode(returns, "
-	  int i, n = p->len;
+	  unsigned int i, n = p->len;
 	  char **s = getmemvectortype(char *,n+1);
 	  for (i = 0; i<n; i++) s[i] = M2_tocharstar(p->array[i]);
 	  s[n] = NULL;
@@ -89,13 +84,13 @@ export tocharstarmalloc(s:string):charstar := Ccode(returns, "
   p[s->len] = 0;
   return p; ");
 export tocharstarstarmalloc(p:ArrayString):charstarstar := Ccode(returns, "
-  int n = p->len;
+  unsigned int n = p->len;
   char **s = (char **)getmem_malloc((n + 1)*sizeof(char *));
   unsigned int i;
   for (i=0; i<n; i++) s[i] = M2_tocharstarmalloc(p->array[i]);
   s[n] = NULL;
   return s;");
-export tostrings(n:int,s:charstarstar):ArrayString := Ccode(returns, "
+export tostrings(n:int,s:constcharstarstar):ArrayString := Ccode(returns, "
   int i;
   M2_ArrayString a = getmemarraytype(M2_ArrayString,n);
   a->len = n;
@@ -143,10 +138,13 @@ export substrAlwaysCopy(x:string,start:int,leng:int):string := Ccode(returns, "
 declarations " extern char newline[]; ";
 header " char newline[] = \"\\n\"; ";
 export newline := tostring(Ccode(constcharstarOrNull,"newline"));
+export envc := 0;
+export argc := 0;
 export envp := array(string)();
 export argv := array(string)();
 export args := array(string)();
 export gbTrace := 0;
+export numTBBThreads := 0; -- 0 means use the maximum
 export numericalAlgebraicGeometryTrace := 0;
 export notify := false;
 export readonlyfiles := false;				    -- see stdio.d

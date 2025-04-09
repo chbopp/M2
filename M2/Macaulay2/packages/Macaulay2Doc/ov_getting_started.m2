@@ -128,7 +128,7 @@ document {
 	  init files so the directory containing M2 will the first one searched when
 	  looking for a program.  If you then try to use your account on different
 	  hardware, incorrect programs may be found, namely, those in the same
-	  directory as M2.  Similarly, incorrect sharable libraries may also be found."
+	  directory as M2.  Similarly, incorrect shareable libraries may also be found."
 	  },
      SeeAlso => {
 	  setupEmacs
@@ -184,7 +184,7 @@ document { Key => "finding the Macaulay2 files",
      ", TT "share", ", so now we know, from the output above, that the Macaulay
      2 files have been installed with a prefix ", TT "/foo/bar", " as the name
      of its root directory.  It will follow, for example, that the M2 emacs
-     init file is located at ", TT "/foo/bar/share/emacs/site-lisp/M2-init.el", ".",
+     init file is located at ", TT "/foo/bar/share/emacs/site-lisp/Macaulay2/M2-init.el", ".",
      PARA {},
      "Another way to locate the files of Macaulay2 is to ask M2, assuming you
      can run it.  Start M2 and type the following expression.",
@@ -296,7 +296,7 @@ document { Key => "teaching emacs how to find M2-init.el",
      "If you are lucky, then the Macaulay2 directory tree has been installed
      with the same root as the emacs directory tree.  For example, if emacs
      and Macaulay2 are both installed in /usr, then ", TT "M2-init.el", " is located at
-     ", TT "/usr/share/emacs/site-lisp/M2-init.el", ", and emacs already knows
+     ", TT "/usr/share/emacs/site-lisp/Macaulay2/M2-init.el", ", and emacs already knows
      to look in that directory for source files.",
      PARA {},
      "The simplest way to teach emacs how to find ", TT "M2-init.el", " is to let M2 do it for you.  Run M2,
@@ -310,13 +310,10 @@ document { Key => "teaching emacs how to find M2-init.el",
      ", and ask for the description of the variable ", TT "load-path", ".",
      PARA {},
      "Let's assume that you have located the Macaulay2 source code, and that
-     ", TT "M2-init.el", " is located at ", TT "/foo/bar/share/emacs/site-lisp/M2-init.el", ",
+     ", TT "M2-init.el", " is located at ", TT "/foo/bar/share/emacs/site-lisp/Macaulay2/M2-init.el", ",
      and that you want to tell emacs to search that directory, too.  
      Insert the following command into the file .emacs in your home directory.",
-     PRE ///    (setq load-path 
-          (append
-           '( "/foo/bar/share/emacs/site-lisp" )
-           load-path))///,
+     PRE ///(add-to-list 'load-path "/foo/bar/share/emacs/site-lisp/Macaulay2")///,
      "The next time you start emacs, emacs will look also in that directory for 
      files, and it should find ", TT "M2-init.el", "."
      }
@@ -365,7 +362,7 @@ document { Key => "teaching emacs how to find M2",
      directory.  Put the following command in your
      .emacs file.",
      PRE ///(setq M2-exe "/foo/bar/bin/M2")///,
-     "The next time you start emacs it wil know how to find M2."
+     "The next time you start emacs it will know how to find M2."
      }
 
 document {
@@ -421,9 +418,7 @@ document {
           to examine the online emacs manual that can be read with ", TT "info", "
           mode; you may enter or re-enter that mode with the keystrokes ", TT "C-h i", ".  "
           },
-     PARA {"The Macaulay2 emacs interface consists of several files
-	  in the directory ", 
-	  TT "share/emacs/site-lisp/",
+     PARA {"The Macaulay2 emacs interface consists of several files in the directory ", TT "share/emacs/site-lisp/Macaulay2/",
 	  " in the Macaulay2 distribution tree.  If you're lucky, then your system administrator has installed Macaulay2 so
 	  that directory ends up in the same place where emacs looks for its files, as listed by the emacs variable ", TT "loadpath", ".
 	  If not, then in order for emacs to be able to find these files, place the following lines
@@ -481,7 +476,7 @@ document {
 	  "Working with two buffers",
 	  "Sending lines or selected text to Macaulay2 using the f11 key",
 	  "Command completion with TAB",
-	  "Horizontal scrolling with f3,f4,f5,f6,f7"
+	  "Horizontal scrolling with f3 and f4"
 	  },
      PARA {"Before starting, note that when we say to type M-x M2, what we really mean is: press the x key while holding down the meta key (on Macs this is either
 	  the option key or the apple key, depending on how your emacs is set up); type M2; and then press the return (or enter) key after that.  Similarly, C-c
@@ -498,10 +493,7 @@ document {
 	  keys are not operable.  In that case press ", TT "C-c m", " instead. 
        	  Another
           reason may be that you have not installed Macaulay2 properly - the startup
-	  script (", TT "M2", " or ", TT "M2.bat", ") should be on your path.
-	  A third reason may be that you are in Windows-98 and are using anti-virus 
-	  software such as ", TT "Dr. Solomon's", ", which can interfere with emacs 
-	  when it tries to run a subprocess."
+	  script (", TT "M2", " or ", TT "M2.bat", ") should be on your path."
 	  },
      PARA {
      	  "You may use ", TT "C-x o", " freely to switch from one window to the other.
@@ -510,24 +502,32 @@ document {
 	  important, as it informs emacs to use the Macaulay2 mode).
 	  Paste the following text into a buffer.  If you wish, save the file using C-x C-s."
 	  },
-     PRE ///    R = QQ[x,y,z]
+     PRE M2CODE ///    R = QQ[x,y,z]
     f = symmetricPower(2,vars R)
     M = cokernel f
     C = resolution M
     betti C///,
      PARA {     
      "Position the cursor on the first line of code, and press the ", TT "f11", " function 
-	  key repeatedly to present each line to Macaulay2.  If you select several lines 
+	  key (or ", TT "C-<return>", ") repeatedly to present each line to Macaulay2.  If you select several lines 
 	  using the mouse, then pressing f11 will present the entire selection to
 	  Macaulay2.  Try this on some of these lines."
 	  },
+     PARA {"Here are some other useful keybindings:"},
+     UL {
+	 LI {TT "C-c C-j", ": send the current line"},
+	 LI {TT "C-c C-r", ": send the current region"},
+	 LI {TT "C-c C-b", ": send the entire buffer"},
+	 LI {TT "C-c C-<up>", ": send everything before the point"},
+	 LI {TT "C-c C-<down>", ": send everything after the point"},
+	 LI {TT "C-c C-p", ": send the current paragraph"}},
      HR{},
 "Now go to the very end of the ", TT "*M2*", " buffer with ", TT "M->", " and 
 experiment with keyword completion.  Type ", TT "reso", " and then press the 
 ", TT "TAB", " key.  Notice how the word is completed to ", TT "resolution", "
 for you.  Delete the word with ", TT "M-DEL", ", type ", TT "res", "
 and then press the ", TT "TAB", " key.  The possible completions are displayed 
-in a window.  Switch to it with the ", TT "F8", " key, move to the desired 
+in a window.  Switch to it with ", TT "M-x switch-to-completions", ", move to the desired 
 completion, select it with the ", TT "RETURN", " key, and then return to the 
 ", TT "*M2*", " buffer with ", TT "C-x o", ".  Alternatively, if you have a
 mouse, use the middle button to select the desired completion. (On the mac, hold down the
@@ -544,7 +544,7 @@ slightly to change it before pressing return.",
      "Now let's see how we can handle wide and tall Macaulay2 output.  Execute the
      following line of code (put it in your foo.m2 buffer, and then press f11)",
      PARA{},
-     PRE ///printWidth=0; random(R^20,R^{6:-2})///,
+     PRE M2CODE ///printWidth=0; random(R^20,R^{6:-2})///,
      "Setting printWidth to zero removes line wrapping in the buffer, sometimes useful to 
      view large matrices.",
 PARA{},
@@ -552,8 +552,8 @@ PARA{},
 around to the next line, simply disappear off the right side of the screen,
 as indicated by the dollar signs or little arrows in the rightmost column.  Switch to the
 other window and practice scrolling up and down with ", TT "M-v", " and ", TT "C-v", ", 
-and scrolling left and right with the function key ", TT "F3", " (or ", TT "C-c <", ") 
-and the function key ", TT "LinearAlgebra", " (or ", TT "C-c >", ").  In modern emacs implementations
+and scrolling left and right with the function key ", TT "F3", " (or ", TT "C-x <", ") 
+and the function key ", TT "F4", " (or ", TT "C-x >", ").  In modern emacs implementations
 where mouse clicking works, click on the arrow to scroll in that direction.  In
 these versions of emacs, typing C-e, or C-a to get at the end or beginning of the line
 also horizontally scrolls the text to that position.  Older emacs tend to need
@@ -562,77 +562,71 @@ Notice how the use of
 ", TT "C-e", " to go to the end of the line
 sends the cursor to the dollar sign at the right hand side of the screen;
 that's where the cursor will appear whenever you go to a position off the
-screen to the right.  Then use the ", TT "f2", " function key (or ", TT "C-c .", ") to 
+screen to the right.  Then use the ", TT "f2", " function key (or ", TT "C-S-c .", ") to 
 scroll the text so the cursor appears at the center of the screen.  Use ", TT "C-a", " to 
 move to the beginning of the line and then the ", TT "f2", " function key 
-(or ", TT "C-c .", ") to bring the left margin back into view.",
+(or ", TT "C-S-c .", ") to bring the left margin back into view.",
 PARA{},
-"You may use the ", TT "f5", " function key or (or ", TT "C-c ?", ") to 
+"You may use ", TT "C-S-c SPC", " to
 toggle whether long lines are truncated or wrapped; initially they are truncated."
      }
 
-document {
-     Key => "reading the documentation",
-     PARA {"The documentation for Macaulay2 is available in several
-     	  formats: text format while in Macaulay2, 
-     	  in info format, and the most important, html format.
-     	  "},
-     "The following functions for available for accessing the documentation.",
-     UL {
-	  TOH "apropos",
-	  TOH "examples",
-	  TOH "help", 
-	  TOH "viewHelp",
-	  TOH "infoHelp"
-	  },
-     PARA {"While in Macaulay2, type ", 
-	  TT"help", 
-	  " to get a summary of the most useful ways of obtaining
-	  help on a topic or function.
-	  Type",
-	  TT "viewHelp",
-	  " to start the web browser (if necessary) and to point it at
-	  the page index.html in your .Macaulay2 directory.
-	  For help on a specific topic, e.g., the jacobian function, use ",
-	  TT"viewHelp jacobian",
-          " or ",
-	  TT///viewHelp "jacobian"///,
-	  " or if you want the documentation for jacobian of an Ideal, use ",
-	  TT ///viewHelp (jacobian,Ideal)///
-     	  },
-     PARA {"Using 'help' instead of 'viewHelp' results in the help text appearing 
-	  in your Macaulay2 session. " 
-	  },
-     EXAMPLE ///help "jacobian"///,
-     PARA {
-	  "A useful tip: in emacs, if you place your cursor on one of the lines that starts with a '*',
-	  and press return, then you will get help on that topic."
-	  },
-     EXAMPLE ///* "jacobian(Ideal)"///,
-     PARA {
-	  "Reading the info form of the documentation in emacs is perhaps better than using ", TO "infoHelp", ",
-	  because the preferred way of running Macaulay2 is also in emacs. If you do so, we
-	  recommend configuring the emacs variable ", TT "Info-hide-note-references", " so
-	  its value is ", TT "hide", ".  The reason is that the Macaulay2 documentation sets up
-	  hyperlinks with all the required text already in them, but if ", TT "Info-hide-note-references", "
-	  is set to ", TT "t", ", then it will insert ", TT "See", " or ", TT "see", " in front of
-	  the hyperlink unless it sees that word (or ", TT "in", ") already present in the text."
-	  },
-     PARA {"The function ", TO apropos, " is useful to find functions and other defined symbols 
-	  which match a search string.  For example, to find all symbols
-	  in Macaulay2 which contain the string 'deal', use"
-     	  },
-     EXAMPLE ///apropos "deal"///,
-     PARA {"The documentation for most functions comes with example code.  You can 
-	  obtain the text of this example code using ", TO examples, "."
-	  },
-     EXAMPLE ///examples "jacobian(Ideal)"///,
-     PARA {
-	  "which returns it as a string. To place these on their own lines, print the string."
-	  },
-     EXAMPLE ///print examples "jacobian(Ideal)"///
-     }
+doc ///
+  Key
+    "reading the documentation"
+  Description
+    Text
+      The documentation for Macaulay2 is available in several formats and can
+      be searched and viewed using the following functions:
 
+    Tree
+      :Finding documentation nodes
+        about
+	apropos
+      :Accessing documentation nodes
+        help
+	viewHelp
+	infoHelp
+	(symbol?, Symbol)
+      :Getting other information from documentation
+        examples
+
+    Text
+      To begin, the @TO "about"@ method allows for searching all documentation nodes
+      whose title or content contains a given string:
+    Example
+      about "Horrocks-Mumford"
+    Text
+      The @TO "apropos"@ method is useful for finding all exported objects whose symbol
+      matches the given regular expression:
+    Example
+      apropos "(H|h)ilbert"
+    Text
+      While in Macaulay2, type @TO "help"@ to get the documentation on a topic or function,
+      or type @TO "viewHelp"@ to open @TT "~/.Macaulay2/index.html"@, which contains a list
+      of all installed packages, in your default web browser.
+
+      For help on a specific topic, e.g., the Jacobian function, use @TT "viewHelp jacobian"@
+      or @TT "viewHelp \"jacobian\""@, or if you want the documentation for Jacobian of an
+      Ideal, use @TT "viewHelp (jacobian, Ideal)"@ or @TT "viewHelp \"jacobian(Ideal)\""@.
+      Using @TO "help"@ instead of @TO "viewHelp"@ results in the help text appearing
+      in your Macaulay2 session.
+
+      @BOLD "A useful tip:"@ within Emacs, if you place your cursor on one of the resulting
+      output lines that starts with a @TT "*"@, and press the return key, Macaulay2 will
+      display that documentation node.
+
+      The documentation for most functions comes with example code.
+      You can obtain the text of this example code using @TO "examples"@.
+  Subnodes
+    about
+    apropos
+    help
+    viewHelp
+    infoHelp
+    (symbol?, Symbol)
+    examples
+///
 
 document {
      Key => "getting help or reporting bugs",
@@ -896,8 +890,9 @@ document {
      TT "M2 file1 file2 ... ", " -- starts the program, reading and 
      executing the specified files.",
      PARA{},
-     "The options that can be provided on the command line may be displayed by running ", TT "M2 --help", ", as follows.",
-     EXAMPLE ///run "M2 --help";///,
+     "The options that can be provided on the command line may be displayed by running ", TT "M2 --help", ".",
+     EXAMPLE ///assert(0 == run (commandLine#0 | " --help"));///,
+     -- In the long run, it would be better if we added the directory containing our M2 to PATH.
      PARA{},
      "To terminate the program, one may type ", TO "exit", ", ", TO "quit", ",
      ", TO "end", ", or the end of file character.",
@@ -936,9 +931,9 @@ document {
      It also provides for dynamic completion of symbols in the language.",
      PARA{},
      "There is an ASCII version of this section of the documentation distributed
-     in the file ", TT (Layout#1#"emacs" | "M2-emacs-hlp.txt"), ". It might be useful for you to visit
+     in the file ", TT (Layout#1#"emacs" | "M2-emacs-help.txt"), ". It might be useful for you to visit
      that file with emacs now, thereby avoiding having to cut and paste bits of
-     text into emacs buffers for the deomonstrations below.",
+     text into emacs buffers for the demonstrations below.",
      PARA{},
      "If you are a newcomer to emacs, start up emacs with the command 
      ", TT "emacs", " and then start up the emacs tutorial with the keystrokes 
@@ -984,7 +979,7 @@ document {
      TO "teaching emacs how to find M2", ".",
      PARA{},
      "You may wish to bind the emacs function ", TT "M2-send-to-program", "
-     to a global keystroke for ease of use; this is done automatically for
+     to a global keystroke for ease of use; this is done automatically
      in Macaulay2 buffers.  For example, the following emacs code
      will bind it to the function key ", TT "f11", ".",
      PARA{},
@@ -997,7 +992,7 @@ document {
      the cursor on the first line of code, and press the ", TT "f11", " function 
      key repeatedly to present each line to Macaulay2.",
      PARA{},
-     PRE ///i1 : R = ZZ/101[x,y,z]
+     PRE M2CODE ///i1 : R = ZZ/101[x,y,z]
      i2 : f = symmetricPower(2,vars R)
      i3 : M = cokernel f
      i4 : C = resolution M
@@ -1106,9 +1101,8 @@ document {
 document {
      Key => "how Macaulay2 finds its files",
      "When you run Macaulay2, it has to find and load a sequence of
-     startup files containing code written in the Macaulay2 language,
-     or it has to find a data file containing a memory dump from a
-     previous session.  Here is the way it does that.",
+     startup files containing code written in the Macaulay2 language.
+     Here is the way it does that.",
      PARA{},
      "Its first task is to discover the path to the binary file ", TT "M2", " that is currently running.  On some systems, that
      information is available from the ", TT "/proc", " file system.  Otherwise, it examines the command name you used to run the
@@ -1120,15 +1114,6 @@ document {
      ", TO "prefixDirectory", ", which you can examine to see whether it all worked out.
      For detailed information about the relative location of Macaulay2 files,
      see ", TO "Layout", ".",
-     PARA{},
-     "A possible data memory dump file may be located in the directory ", TT replace("PKG","Core",Layout#1#"packagecache"), " 
-     and loaded with ", TO "loaddata", ".  If the file is present and and loading it works, then startup will be quicker.  
-     If it's absent then the necessary setup files will be loaded instead;
-     if problems with it are encountered, it is always safe to delete it.
-     The name of the file data dump file is of the form \"Macaulay2-*-data\",
-     where \"*\" is replaced by the value of the environment
-     variable name M2ARCH if present, or else is a value computed at compile time and
-     stored in the hash table called ", TO "version", " and accessible as ", TT "version#\"architecture\"", ".",
      Subnodes => {
 	  TO "Layout",
      	  TO "prefixDirectory"

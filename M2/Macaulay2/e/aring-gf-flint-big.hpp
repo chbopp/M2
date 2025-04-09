@@ -8,15 +8,21 @@
 // The following needs to be included before any flint files are included.
 #include <M2/gc-include.h>
 
+// includes gmp.h, which is required for FLINT functions that use GMP
+#include <M2/math-include.h>
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <flint/fq_nmod.h>
-#include <flint/flint.h>
+#include <flint/flint.h>       // for flint_free, flint_rand_t, fmpz_t
+#include <flint/fmpz.h>        // for fmpz_clear_readonly, fmpz_init_set_...
+#include <flint/fq_nmod.h>     // for fq_nmod_init2, fq_nmod_clear, fq_nm...
+#include <flint/nmod_poly.h>   // for nmod_poly_degree, nmod_poly_get_coe...
 #pragma GCC diagnostic pop
 
 #include "aring.hpp"
 #include "buffer.hpp"
 #include "ringelem.hpp"
+#include "exceptions.hpp" // for exc::division_by_zero_error
 
 class PolynomialRing;
 class RingElement;
@@ -31,8 +37,72 @@ class ARingGFFlintBig : public RingInterface
 {
  public:
   static const RingID ringID = ring_GFFlintBig;
-  typedef nmod_poly_struct ElementType;
+  typedef fq_nmod_struct ElementType;
+  // this type is defined in fq_nmod.h
+  // for debugging purposes (flint version 2.5):
+  // this is nmod_poly_struct, defined in nmod_poly.h
+  // typedef struct
+  // {
+  //   mp_ptr coeffs;
+  //   slong alloc;
+  //   slong length;
+  //   nmod_t mod;
+  // } nmod_poly_struct;
+  
   typedef ElementType elem;
+  typedef std::vector<elem> ElementContainerType;
+
+  /**
+   * \brief A wrapper class for ElementType
+   *
+   * This keeps a pointer to the fq_nmod_ctx_struct as it's needed to
+   * implement the destructor
+   */
+  class Element : public ElementImpl<ElementType>
+  {
+   public:
+    Element() = delete;
+    Element(Element&& other) : mContext(other.mContext)
+    {
+      // figure out how to move the value without the context
+      fq_nmod_init2(&mValue, mContext);
+      fq_nmod_set(&mValue, &other.mValue, mContext);
+    }
+    explicit Element(const ARingGFFlintBig& R) : mContext(R.mContext)
+    {
+      fq_nmod_init2(&mValue, mContext);
+    }
+    Element(const ARingGFFlintBig& R, const ElementType& value) : mContext(R.mContext)
+    {
+      R.init_set(mValue, value);
+    }
+    ~Element() { fq_nmod_clear(&mValue, mContext); }
+
+   protected:
+    const fq_nmod_ctx_struct* mContext;
+  };
+
+  class ElementArray
+  {
+    const fq_nmod_ctx_struct* mContext;
+    const int mSize;
+    std::unique_ptr<ElementType[]> mData;
+
+   public:
+    ElementArray(const ARingGFFlintBig& R, size_t size)
+        : mContext(R.mContext), mSize(size), mData(new ElementType[size])
+    {
+      for (size_t i = 0; i < mSize; i++) fq_nmod_init2(&mData[i], mContext);
+    }
+    ~ElementArray()
+    {
+      for (size_t i = 0; i < mSize; i++) fq_nmod_clear(&mData[i], mContext);
+    }
+    ElementType& operator[](size_t idx) { return mData[idx]; }
+    const ElementType& operator[](size_t idx) const { return mData[idx]; }
+    ElementType *data() { return mData.get(); }
+    const ElementType *data() const { return mData.get(); }
+  };
 
   ARingGFFlintBig(const PolynomialRing& R, const ring_elem a);
 
@@ -80,6 +150,11 @@ class ARingGFFlintBig : public RingInterface
     ElementType* b = getmemstructtype(ElementType*);
     init(*b);
     copy(*b, a);
+    size_t coeffs_size = sizeof(mp_limb_t)*b->alloc;
+    mp_ptr coeffs = reinterpret_cast<mp_ptr>(getmem_atomic(coeffs_size));
+    memcpy(coeffs,b->coeffs,coeffs_size);
+    flint_free(b->coeffs);
+    b->coeffs = coeffs;
     result.poly_val = reinterpret_cast<Nterm*>(b);
   }
 
@@ -87,6 +162,11 @@ class ARingGFFlintBig : public RingInterface
   {
     ElementType* b = reinterpret_cast<ElementType*>(a.poly_val);
     copy(result, *b);
+  }
+
+  const ElementType& from_ring_elem_const(const ring_elem& a) const
+  {
+    return *reinterpret_cast<ElementType*>(a.poly_val);
   }
 
   bool is_unit(const ElementType& f) const { return not is_zero(f); }
@@ -128,13 +208,13 @@ class ARingGFFlintBig : public RingInterface
     fromSmallIntegerCoefficients(result, poly);
   }
 
-  void set_from_mpz(ElementType& result, mpz_ptr a) const
+  void set_from_mpz(ElementType& result, mpz_srcptr a) const
   {
     int b = static_cast<int>(mpz_fdiv_ui(a, characteristic()));
     set_from_long(result, b);
   }
 
-  bool set_from_mpq(ElementType& result, mpq_ptr a) const
+  bool set_from_mpq(ElementType& result, mpq_srcptr a) const
   {
     ElementType n, d;
     init(n);
@@ -154,7 +234,8 @@ class ARingGFFlintBig : public RingInterface
 
   void invert(ElementType& result, const ElementType& a) const
   {
-    assert(not is_zero(a));
+    if (is_zero(a))
+      throw exc::division_by_zero_error();
     fq_nmod_inv(&result, &a, mContext);
   }
 
@@ -205,7 +286,6 @@ class ARingGFFlintBig : public RingInterface
       printf("\n  b = ");
       fq_nmod_print_pretty(&b, mContext);
 #endif
-    assert(not is_zero(b));
     invert(c, b);
 #if 0
       printf("\n  1/b = ");
@@ -222,9 +302,7 @@ class ARingGFFlintBig : public RingInterface
 
   void power(ElementType& result, const ElementType& a, int n) const
   {
-    if (is_zero(a))
-      set_zero(result);
-    else if (n < 0)
+    if (n < 0)
       {
         invert(result, a);
         fq_nmod_pow_ui(&result, &result, -n, mContext);
@@ -233,28 +311,28 @@ class ARingGFFlintBig : public RingInterface
       fq_nmod_pow_ui(&result, &a, n, mContext);
   }
 
-  void power_mpz(ElementType& result, const ElementType& a, mpz_ptr n) const
+  void power_mpz(ElementType& result, const ElementType& a, mpz_srcptr n) const
   {
-    if (is_zero(a))
-      {
-        set_zero(result);
-        return;
-      }
-    bool neg = false;
-    if (mpz_sgn(n) < 0)
-      {
-        neg = true;
-        mpz_neg(n, n);
-        invert(result, a);
-      }
-    else
-      copy(result, a);
+    if (mpz_sgn(n) < 0 and is_zero(a))
+      throw exc::division_by_zero_error();
 
+    ElementType base;
+    init(base);
+    if (mpz_sgn(n) < 0)
+      invert(base, a);
+    else
+      copy(base, a);
+
+    mpz_t abs_n;
+    mpz_init(abs_n);
+    mpz_abs(abs_n, n);
+    
     fmpz_t fn;
-    fmpz_init_set_readonly(fn, n);
-    fq_nmod_pow(&result, &result, fn, mContext);
+    fmpz_init_set_readonly(fn, abs_n);
+    fq_nmod_pow(&result, &base, fn, mContext);
     fmpz_clear_readonly(fn);
-    if (neg) mpz_neg(n, n);
+    mpz_clear(abs_n);
+    clear(base);
   }
 
   void swap(ElementType& a, ElementType& b) const

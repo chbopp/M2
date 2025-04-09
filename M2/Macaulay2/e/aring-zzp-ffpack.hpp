@@ -6,12 +6,16 @@
 #include "aring.hpp"
 #include "buffer.hpp"
 #include "ringelem.hpp"
-#include <iostream>
+
+#include <type_traits> // define bool_constant to fix issue #2347
+#include <utility>
+#include <ratio> //fix compilation errors on some macs
+
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wshorten-64-to-32"
 #pragma GCC diagnostic ignored "-Wconversion"
+#define bool_constant givaro_bool_constant
 #include <fflas-ffpack/ffpack/ffpack.h>
+#undef bool_constant
 #pragma GCC diagnostic pop
 
 namespace M2 {
@@ -22,7 +26,7 @@ namespace M2 {
    @brief wrapper for the FFPACK::ModularBalanced<double> field implementation
 */
 
-class ARingZZpFFPACK : public RingInterface
+class ARingZZpFFPACK : public SimpleARing<ARingZZpFFPACK>
 {
  public:
   /// @jakob extract Signed_Trait from givaro.  Or use c++11.
@@ -36,6 +40,7 @@ class ARingZZpFFPACK : public RingInterface
 
   typedef FieldType::Element ElementType;
   typedef ElementType elem;
+  typedef std::vector<elem> ElementContainerType;
 
   typedef uint32_t
       UTT;  ////// attention: depends on STT;currently manual update
@@ -110,12 +115,17 @@ class ARingZZpFFPACK : public RingInterface
   {
     // Note that the max modulus is small enough (about 70 million in 2013)
     // so that the coercion to an int will be correct.
-    result.int_val = static_cast<int>(a);
+    result = ring_elem(static_cast<int>(a));
   }
 
   void from_ring_elem(ElementType &result, const ring_elem &a) const
   {
-    result = a.int_val;
+    result = a.get_int();
+  }
+
+  ElementType from_ring_elem_const(const ring_elem &a) const
+  {
+    return a.get_int();
   }
 
   /** @} */
@@ -134,7 +144,7 @@ class ARingZZpFFPACK : public RingInterface
   void set(ElementType &result, ElementType a) const { result = a; }
   void init(ElementType &result) const;
 
-  void clear(ElementType &result) const;
+  static void clear(ElementType &result) {};
 
   void set_zero(ElementType &result) const;
 
@@ -142,9 +152,9 @@ class ARingZZpFFPACK : public RingInterface
 
   void set_from_long(ElementType &result, long a) const;
 
-  void set_from_mpz(ElementType &result, const mpz_ptr a) const;
+  void set_from_mpz(ElementType &result, mpz_srcptr a) const;
 
-  bool set_from_mpq(ElementType &result, const mpq_ptr a) const;
+  bool set_from_mpq(ElementType &result, mpq_srcptr a) const;
 
   bool set_from_BigReal(ElementType &result, gmp_RR a) const { return false; }
   ElementType computeGenerator() const;
@@ -183,7 +193,7 @@ class ARingZZpFFPACK : public RingInterface
 
   void power_mpz(ElementType &result,
                  const ElementType a,
-                 const mpz_ptr n) const;
+                 mpz_srcptr n) const;
 
   void syzygy(const ElementType a,
               const ElementType b,

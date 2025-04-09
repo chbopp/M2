@@ -24,6 +24,8 @@ newPackage(
 			{Name => "Dan Roozemond", Email => "dan.roozemond@gmail.com", HomePage => "http://magma.maths.usyd.edu.au/~danr"}
 		},
     	Headline => "OpenMath for Macaulay2",
+	Keywords => {"System"},
+	PackageImports => {"MinimalPrimes"},
 	PackageExports => {"XML","ConwayPolynomials"},
     	DebuggingMode => false,
 		AuxiliaryFiles => true
@@ -75,6 +77,9 @@ beginDocumentation()
 document { 
 	Key => OpenMath,
 	Headline => "OpenMath support",
+	"This package provides methods  for representing Macaulay2 objects ",
+	"using the ", HREF("https://openmath.org/", "OpenMath"), " standard ",
+	"and vice versa.",
 	SeeAlso => {(val, XMLnode)}
 	}
 

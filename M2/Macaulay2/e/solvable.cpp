@@ -20,7 +20,7 @@ SolvableAlgebra *SolvableAlgebra::create(const Ring *K,
   SolvableAlgebra *result = new SolvableAlgebra;
 
   result->initialize_poly_ring(K, M);
-  if (!result->initialize_solvable(Q)) return 0;
+  if (!result->initialize_solvable(Q)) return nullptr;
   result->gb_ring_ = GBRing::create_SolvableAlgebra(K, M, result);
   return result;
 }
@@ -62,7 +62,7 @@ ring_elem SolvableAlgebra::mult_by_term(const ring_elem f,
   return ZERO_RINGELEM;
 }
 
-ring_elem SolvableAlgebra::power(const ring_elem f, mpz_t n) const
+ring_elem SolvableAlgebra::power(const ring_elem f, mpz_srcptr n) const
 {
   std::pair<bool, int> n1 = RingZZ::get_si(n);
   if (n1.first)

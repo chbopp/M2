@@ -1,12 +1,12 @@
  --		Copyright 1993-2002 by Daniel R. Grayson
 
+needs "monoids.m2"  -- for degreesMonoid
+needs "reals.m2" -- for inexact number
+
 -----------------------------------------------------------------------------
 -- Matrix
 
-ModuleMap = new Type of HashTable
-ModuleMap.synonym = "module map"
-
-Matrix = new Type of ModuleMap
+Matrix = new Type of HashTable
 Matrix.synonym = "matrix"
 raw Matrix := f -> f.RawMatrix
 ring Matrix := f -> (
@@ -45,9 +45,9 @@ scan( {ZZ,QQ}, K -> (
 	  ))
 
 scan((
-	  (ZZ, { QQ, RR', CC' }),
-	  (QQ, { RR', CC' }),
-	  (RR',{ RR', CC' }),
+	  (ZZ, { QQ, RR', CC', RRi' }),
+	  (QQ, { RR', CC', RRi' }),
+	  (RR',{ RR', CC', RRi' }),
 	  (CC', { CC' })
 	  ), 
      (K,Ls) -> scan(Ls, L -> (
@@ -67,20 +67,36 @@ vector Matrix := f -> (
      if not isFreeModule source f or numgens source f =!= 1 then error "expected source to be free with rank 1";
      new target f from {f}
     )
-vector List := v -> vector matrix apply(v, i -> {i});
+vector List := v -> vector matrix apply(splice v, i -> {i});
+vector RingElement := vector Number := x -> vector {x}
 
 -----------------------------------------------------------------------------
 
 Vector = new Type of BasicList				    -- an instance v will have one entry, an n by 1 matrix m, with class v === target m
 Vector.synonym = "vector"
 Vector _ ZZ := (v,i) -> (ambient v#0)_(i,0)
-net Vector := v -> net super first v
 entries Vector := v -> entries ambient v#0 / first
 norm Vector := v -> norm v#0
-toExternalString Vector := 				    -- not quite right
-toString Vector := v -> concatenate ( "vector ", toString entries super v )
+expression Vector := v -> VectorExpression apply(flatten entries super v#0,expression)
+net Vector := v -> net expression v
+describe Vector := v -> Describe expression FunctionApplication(
+    vector, (describe module v, describe \ flatten entries matrix v))
+toExternalString Vector := toString @@ describe
+toString Vector := v -> toString expression v
+texMath Vector := v -> texMath expression v
+--html Vector := v -> html expression v
+
+-- helper for Matrix#AfterPrint and Vector#AfterPrint
+moduleAbbrv = (M, abbrv) -> (
+    if isFreeModule M then M
+    else if hasAttribute(M, ReverseDictionary)
+    then getAttribute(M, ReverseDictionary)
+    else abbrv)
+
+Vector#AfterPrint = Vector#AfterNoPrint = v -> moduleAbbrv(module v, Vector)
+
 ring Vector := v -> ring class v
-module Vector := v -> target first v
+module Vector := v -> target v#0
 leadTerm Vector := v -> new class v from leadTerm v#0
 degree Vector := v -> (
      f := ambient v#0;
@@ -89,24 +105,37 @@ matrix Vector := opts -> v -> v#0
 new Matrix from Vector := (Matrix,v) -> v#0
 new Vector from Matrix := (M,f) -> (
      if not isFreeModule source f or numgens source f =!= 1 then error "expected source to be free with rank 1";
-     if M === Vector then error "expected a module";
      if M =!= target f then error "module must be target of matrix";
      new M from {f})
+super Vector := Vector => v -> vector super v#0
 
-Number * Vector := RingElement * Vector := (r,v) -> new class v from {r * v#0}
-Vector + Vector := (v,w) -> (
-     if class v =!= class w then error "expected vectors from the same module";
-     m := v#0 + w#0;
-     new target m from {m})
-Vector - Vector := (v,w) -> (
-     if class v =!= class w then error "expected vectors from the same module";
-     m := v#0 - w#0;
-     new target m from {m})
+Vector || Vector := Vector => (v,w) -> vector(v#0||w#0)
+Vector ^ List := (v,l) -> vector (v#0^l)
 
-Vector ** Vector := (v,w) -> (
-     if ring v =!= ring w then error "expected vectors over the same ring";
-     u := v#0 ** w#0;
-     new target u from {u})
+promote(Vector,InexactNumber) := 
+promote(Vector,InexactNumber') :=
+promote(Vector,RingElement) := 
+promote(Vector,Number) := Vector => (v,S) -> vector (promote(v#0,S))
+numeric Vector := v -> numeric(defaultPrecision,v)
+numeric(ZZ,Vector) := (prec,v) -> (
+     F := ring v;
+     if instance(F, InexactField) then return v;
+     if F === ZZ or F === QQ then return promote(v,RR_prec);
+     error "expected vector of numbers"
+     )
+lift(Vector,InexactNumber) :=
+lift(Vector,InexactNumber') :=
+lift(Vector,RingElement) :=
+lift(Vector,Number) := Vector => o -> (v,S) -> vector (lift(v#0,S))
+
++ Vector := Vector => identity
+- Vector := Vector => v -> new class v from {-v#0}
+Number * Vector := RingElement * Vector := Vector => (r,v) -> vector(r * v#0)
+Vector * Number := Vector * RingElement := Vector => (v,r) -> vector(v#0 * r)
+Vector / Number := Vector / RingElement := Vector => (v,r) -> vector(v#0 / r)
+Vector + Vector := Vector => (v,w) -> vector(v#0+w#0)
+Vector - Vector := Vector => (v,w) -> vector(v#0-w#0)
+Vector ** Vector := Vector => (v,w) -> vector(v#0**w#0)
 
 Vector == Vector := (v,w) -> v === w
 
@@ -138,11 +167,14 @@ new Module from Sequence := (Module,x) -> (
      	       symbol numgens => rawRank rM
      	       })) x
 
-degreesMonoid Module := GeneralOrderedMonoid => M -> degreesMonoid ring M
-degreesRing Module := PolynomialRing => M -> degreesRing ring M
-degreeLength Module := M -> degreeLength ring M
+vector(Module, Matrix) := (M, f) -> vector map(M,,entries f)
+vector(Module, List)   := (M, v) -> vector map(M,,apply(splice v, i -> {i}))
+vector(Module, RingElement) := vector(Module, Number) := (M, x) -> vector(M, {x})
+
+Module#id = M -> map(M, M, 1)
 raw Module := M -> M.RawFreeModule
 ring Module := M -> M.ring
+module Module := identity
 
 lift(Module,InexactNumber) := opts -> (M,RR) -> lift(M,default RR,opts)
 lift(Module,InexactNumber') :=
@@ -174,8 +206,6 @@ isSubmodule = method(TypicalValue => Boolean)
 isSubmodule Thing := x -> false
 isSubmodule Module := M -> not M.?relations
 
-degreeLength Module := M -> degreeLength ring M
-
 isQuotientModule = method(TypicalValue => Boolean)
 isQuotientModule Thing := x -> false
 isQuotientModule Module := M -> not M.?generators
@@ -193,172 +223,140 @@ numgens Module := M -> (
      else M.numgens
      )
 
-toString Module := M -> (
-     if M.?relations then (
-	  if M.?generators
-	  then "subquotient(" | toString M.generators | "," | toString M.relations | ")"
-	  else "cokernel " | toString M.relations
-	  )
-     else (
-	  if M.?generators
-	  then "image " | toString M.generators
-	  else (
-	       if numgens M === 0
-	       then "0"
-	       else toString expression M
-	       )
-	  )
-     )
-
-toExternalString Module := M -> (
-     if M.?relations then (
-	  if M.?generators
-	  then "subquotient(" | toExternalString M.generators | "," | toExternalString M.relations | ")"
-	  else "cokernel " | toExternalString M.relations
-	  )
-     else (
-	  if M.?generators
-	  then "image " | toExternalString M.generators
-	  else (
-	       if all(degrees M, deg -> all(deg, zero)) 
-	       then "(" | toString ring M | ")^" | numgens M
-	       else "(" | toString ring M | ")^" | toExternalString (- degrees M)
-	       )
-	  )
-     )
-
 expression Module := M -> (
-     if M.?relations 
+     if M.?relations
      then if M.?generators
-     then new FunctionApplication from { subquotient, (expression M.generators, expression M.relations) }
-     else new FunctionApplication from { cokernel, expression M.relations }
+     then (expression subquotient) (expression (M.generators, M.relations))
+     else (expression cokernel) (expression M.relations)
      else if M.?generators
-     then new FunctionApplication from { image, expression M.generators }
-     else if numgens M === 0 then 0
-     else new Power from {expression ring M, numgens M}
-     )
-
--- net Module := M -> net expression M
-
-net Module := M -> (
-     -- we want compactMatrixForm to govern the matrix here, also.
-     if M.?relations 
-     then if M.?generators
-     then net new FunctionApplication from { subquotient, (net M.generators, net M.relations) }
-     else net new FunctionApplication from { cokernel, net M.relations }
-     else if M.?generators
-     then net new FunctionApplication from { image, net M.generators }
-     else if numgens M === 0 then "0"
+     then (expression image) (expression M.generators)
      else (
-	  R := ring M;
-	  net new Superscript from { if hasAttribute(R,ReverseDictionary) then getAttribute(R,ReverseDictionary) else expression R, numgens M}
-	  )
+	 n := numgens M;
+	 new Superscript from {unhold expression ring M, if n =!= 0 then unhold expression n else moduleZERO }
      )
+ )
+toString Module := M -> toString expression M
+net Module := M -> net expression M
+texMath Module := M -> texMath expression M
 
-Module == Module := (M,N) -> (
-     -- this code might not be the quickest - Mike should check it
-     ring M === ring N
-     and degrees ambient M === degrees ambient N
-     and (
-	  if M.?relations 
-	  then N.?relations and (
-	       -- if isHomogeneous N.relations and isHomogeneous M.relations
-	       -- then gb N.relations == gb M.relations
-	       -- else 
-		    (
-		    -- temporary
-		    isSubset(image M.relations, image N.relations)
-		    and
-		    isSubset(image N.relations, image M.relations)
-		    )
-	       )
-     	  else not N.?relations
-	  )
-     and (
-	  if M.?generators then (
-	       if N.?generators then (
-		    f := (
-			 if M.?relations 
-			 then M.relations|M.generators
-		    	 else M.generators);
-		    g := (
-			 if N.?relations
-			 then N.relations|N.generators
-			 else N.generators);
-		    -- if isHomogeneous f and isHomogeneous g
-		    -- then gb f == gb g
-		    -- else 
-			 (
-			 -- temporary
-		    	 isSubset(image f, image g)
-		    	 and
-		    	 isSubset(image g, image f)
-			 )
-		    )
-	       else (
-		    f = (
-			 if M.?relations
-			 then M.relations|M.generators
-			 else M.generators
-			 );
-		    if isHomogeneous f then f = substitute(f,0);
-		    isSubset(ambient N, image f)))
-	  else (
-	       if N.?generators then (
-		    g = (
-			 if N.?relations 
-			 then N.relations|N.generators 
-			 else N.generators
-			 );
-		    if isHomogeneous g then g = substitute(g,0);
-		    isSubset(ambient M, image g))
-	       else true)))
+describe Module := M -> Describe (
+     if M.?relations
+     then if M.?generators
+     then (expression subquotient) (unhold describe M.generators, unhold describe M.relations)
+     else (expression cokernel) (describe M.relations)
+     else if M.?generators
+     then (expression image) (describe M.generators)
+     else new Superscript from {unhold expression ring M, if all(degrees M, deg -> all(deg, zero)) then expression numgens M
+	 else expression runLengthEncode(-degrees M)}
+     )
+toExternalString Module := M -> toString describe M
 
-degrees Module := N -> if N.?degrees then N.cache.degrees else N.cache.degrees = (
-     if not isFreeModule N then N = cover N;
-     rk := numgens N;
-     R := ring N;
-     nd := degreeLength R;
-     if nd == 0 then toList (rk : {})
-     else pack(nd,rawMultiDegree N.RawFreeModule))
+-- TODO: where is it set before being cached?
+degrees Module := -*(cacheValue symbol degrees) (*-N -> (
+    r := degreeLength(R := ring N);
+    if r == 0 then toList(numgens N : {}) else (
+	degs := pack(r, rawMultiDegree raw cover N);
+	if not (M := monoid R).?degreeGroup
+	or isFreeModule(G := M.degreeGroup) then degs
+	else apply(degs, reduceDegree_G)))
+--    )
 
-Module ^ ZZ := Module => (M,i) -> directSum (i:M)
+-----------------------------------------------------------------------------
+-- free modules and vector spaces
 
-Ring ^ List := Module => (
-     (R,degs) -> (
-	  degs = - splice degs;
-	  if R.?RawRing then (
-	       -- check the args
-	       ndegs := degreeLength R;
-	       if #degs === 0 then ()
-	       else if all(degs,i -> class i === ZZ) then (
-		    if ndegs =!= 1
-	       	    then error ("expected each multidegree to be of length ", toString ndegs))
-	       else if all(degs,v -> class v === List) then (
-		    scan(degs,v -> (
-			      if #v =!= ndegs
-			      then error (
-				   "expected each multidegree to be of length ",
-				   toString ndegs
-				   );
-			      if not all(v,i->class i === ZZ)
-			      then error "expected each multidegree to be a list of integers")))
-	       else error "expected a list of integers or a list of lists of integers";
-	       -- then adjust the args
-	       fdegs := flatten degs;
-	       -- then do it
-	       if # fdegs === 0 
-	       then new Module from (R,rawFreeModule(R.RawRing,#degs))
-	       else new Module from (R,rawFreeModule(R.RawRing,toSequence fdegs))
-	       )
-	  else error "non-engine free modules with degrees not implemented yet"
-	  ))
+Ring ^ ZZ   := Module => (R, n) -> (
+    if not R.?RawRing then error "non-engine free modules with degrees not implemented yet";
+    new Module from (R, rawFreeModule(R.RawRing, n)))
 
-SparseDisplayThreshhold := 15
+Ring ^ List := Module => (R, degs) -> (
+    if not R.?RawRing then error "non-engine free modules with degrees not implemented yet";
+    -- check the args
+    degs = - splice degs;
+    degrk := degreeLength R;
+    if #degs === 0 then ()
+    else if isListOfIntegers degs        then ( if degrk != 1
+	then error("expected each multidegree to be of length ", degrk))
+    else if isListOfListsOfIntegers degs then ( if any(degs, deg -> degrk != #deg)
+	then error("expected each multidegree to be of length ", degrk))
+    else error "expected a list of integers or a list of lists of integers";
+    -- then flatten the args
+    fdegs := toSequence flatten degs;
+    new Module from (R, rawFreeModule(R.RawRing, if #fdegs === 0 then #degs else fdegs)))
 
-Ring ^ ZZ := Module => (R,n) -> if R.?RawRing then new Module from (R, rawFreeModule(R.RawRing,n)) else notImplemented()
+RingFamily ^ ZZ   :=
+RingFamily ^ List := Module => (T, degs) -> (default T)^degs
 
-InexactFieldFamily ^ ZZ := Module => (T,n) -> (default T)^n
+-----------------------------------------------------------------------------
+-- Containment and Equality of Modules
+-----------------------------------------------------------------------------
+
+-- the key for issub hooks under GlobalHookStore
+protect ContainmentHooks
+issub = (f, g) -> f === g or ring f === ring g and tryHooks(ContainmentHooks, (f, g),
+    -- This is used by isSubset and for checking equality of modules and ideals.
+    -- Specialized strategies may be added as hooks, for instance for local rings.
+    -- TODO: how can do better in the homogeneous case?
+    (f, g) -> -1 === rawGBContains(raw gb g, raw f))
+
+-- check equality of the column spans as sets
+isequal := (f, g) -> f === g or issub(f, g) and issub(g, f)
+
+-- gives generators for the entire coset of the module
+cosetgens := M -> if M.?relations then M.relations | generators M else generators M
+
+Module == Module := (M, N) -> M === N or ring M === ring N and tryHooks((symbol ==, Module, Module), (M, N),
+    -- Specialized strategies for equality of modules may be added as hooks.
+    -- The following is the default strategy using generators and relations.
+    (M, N) -> (
+	-- TODO: first look to see if the minimal presentation
+	-- of M and N are cached, and if so compare them with ===
+	-- check whether M and N are equal as cosets to zero,
+	-- e.g. 0*S^1 == 0*S^2 but 0*S^1 != subquotient(|x|, |x|)
+	cosetgens M == 0 and cosetgens N == 0 or
+	-- check that ambient free modules are the same
+	degrees ambient M === degrees ambient N
+	and (
+	    -- check that neither have relations
+	    not M.?relations and not N.?relations
+	    -- or that they have the same relations
+	    or M.?relations and N.?relations and isequal(M.relations, N.relations)
+	    )
+	and (
+	    -- check that both have generators and, together with their relations, their spans are equal
+	    -- (e.g. this ensures that subquotient(|x|, |x2,y|) & subquotient(|x,y|,|x2,y|) are equal)
+	    if M.?generators and N.?generators then isequal(cosetgens M, cosetgens N)
+	    -- otherwise check that the generators are superfluous, i.e. image gens M == ambient M (or the same for N)
+	    else if M.?generators then issub(generators N, if isHomogeneous M then substitute(cosetgens M, 0) else cosetgens M)
+	    else if N.?generators then issub(generators M, if isHomogeneous N then substitute(cosetgens N, 0) else cosetgens N)
+	    else true
+	    )
+	)
+    )
+
+protect isZero
+ZZ == Module := (n, M) -> M == n
+Module == ZZ := (M, n) -> M.cache.isZero ??= (
+    if n =!= 0 then error "attempted to compare module to nonzero integer";
+    -- the default strategy for issub computes a gb for the relations
+    if M.?relations  then issub(generators M, M.relations) else
+    if M.?generators then M.generators == 0 else M.numgens == 0)
+
+isSubset(Module, Module) := (M, N) -> (
+    -- here is where we could use gb of a subquotient!
+    ambient M === ambient N and
+    if  not M.?relations and not N.?relations then issub(generators M, generators N)
+    else if M.?relations and     N.?relations then (
+	isequal(M.relations, N.relations) and issub(generators M, generators N | N.relations))
+    -- see the code for subquotient: if present, M.relations is nonzero; same for N
+    -- so one of the modules has nonzero relations and the other doesn't
+    else false)
+
+-----------------------------------------------------------------------------
+
+-- used for sorting a list of modules
+Module ? Module := (M, N) -> if rank M != rank N then rank M ? rank N else degrees M ? degrees N
+
+-----------------------------------------------------------------------------
 
 schreyerOrder = method()
 schreyerOrder Module := Matrix => (F) -> (
@@ -368,28 +366,8 @@ schreyerOrder Module := Matrix => (F) -> (
      tar := new Module from (ring F, rawTarget m);
      map(tar,src,m))
 
-schreyerOrder Matrix := Matrix => (m) -> map(target m, new Module from (ring m, rawSchreyerSource raw m), m)
+schreyerOrder Matrix := Matrix => (m) -> map(ring m, schreyerOrder raw m)
 schreyerOrder RawMatrix := RawMatrix => (m) -> rawMatrixRemake2(rawTarget m, rawSchreyerSource m, rawMultiDegree m, m, 0)
-
-euler Module := (M) -> euler hilbertPolynomial M
-euler Ring := (R) -> euler R^1
-
-eulers Module := (M) -> (
-     h := hilbertPolynomial M;
-     apply(toList ( 0 .. dim h ), i -> euler diff(h,i) ))
-eulers Ring := (R) -> eulers R^1
-
-genera Module := (M) -> (
-     e := eulers M;
-     d := dim M - 1;
-     apply(#e, i -> (-1)^(i+d) * (e#i - 1)))
-genera Ring := (R) -> genera R^1
-
-genus Module := (M) -> (
-     e := euler M;
-     d := dim M - 1;
-     (-1)^d * (e - 1))
-genus Ring := (R) -> genus R^1
 
 possiblyLift := x -> if denominator x === 1 then numerator x else x -- x is in QQ
 
@@ -430,25 +408,20 @@ super(Module) := Module => (M) -> (
      else M
      )
 
-End = (M) -> Hom(M,M)
+-----------------------------------------------------------------------------
 
-Module#{Standard,AfterPrint} = M -> (
-     << endl;				  -- double space
-     n := rank ambient M;
-     << concatenate(interpreterDepth:"o") << lineNumber << " : "
-     << ring M
-     << "-module";
-     if M.?generators then
-     if M.?relations then << ", subquotient of " << ambient M
-     else << ", submodule of " << ambient M
-     else if M.?relations then << ", quotient of " << ambient M
-     else if n > 0 then (
-	  << ", free";
-	  if not all(degrees M, d -> all(d, zero)) 
-	  then << ", degrees " << runLengthEncode if degreeLength M === 1 then flatten degrees M else degrees M;
-	  );
-     << endl;
-     )
+Module#AfterPrint = M -> (
+    ring M,"-module",
+    if M.?generators then
+    if M.?relations then (", ",subquotient," of ",ambient M)
+    else (", submodule of ",ambient M)
+    else if M.?relations then (", ",quotient," of ",ambient M)
+    else if rank ambient M > 0 then
+    (", free",
+	if not all(degrees M, d -> all(d, zero))
+	then (", degrees ",runLengthEncode if degreeLength ring M === 1 then flatten degrees M else degrees M)
+	)
+    )
 
 RingElement * Module := Module => ZZ * Module := (r,M) -> subquotient (r ** generators M, relations M)
 Module * RingElement := Module => Module * ZZ := (M,r) -> subquotient ((generators M) ** r, relations M)

@@ -4,7 +4,7 @@
 --   Slice,                -- a matrix of coefficients of linear equations 
 --                            (e.g., row [1,2,3] corresponds to x+2y+3=0)
 --   Points,	           -- a list of points (in the format of the output of solveSystem/track) 
---   IsIrreducible,        -- true, false, or null
+--   cache.IsIrreducible,        -- true, false, or null
 --   [ProjectionDimension]   -- an integer n, the set describes a projection a variety to the first n coordinates
 --   [SolutionSystem]        -- a square system built from Equations and Slice that Points satisfy
 --   [LiftedSystem]          -- a regularization of SolutionSystem (in case Points are not regular)
@@ -16,14 +16,15 @@
 --                            (e.g., [1,2,3] corresponds to x+2y+3=1)  
 --     }
 WitnessSet.synonym = "witness set"
+texMath WitnessSet := x -> texMath net x
 net WitnessSet := W -> (
     if hasAnAttribute W then (
 	if hasAttribute(W,PrintNet) then return getAttribute(W,PrintNet);
   	if hasAttribute(W,PrintNames) then return net getAttribute(W,PrintNames);
   	if hasAttribute(W,ReverseDictionary) then return toString getAttribute(W,ReverseDictionary);
   	);
-    if not W.?IsIrreducible or W.IsIrreducible===null or not W.IsIrreducible 
-    then "[dim=" | net dim W |",deg="| net degree W | "]" 
+    if not W.cache.?IsIrreducible or W.cache.IsIrreducible===null
+    then "[dim=" | net dim W |",deg="| net degree W | "]-*may be reducible*-" 
     else "(dim=" | net dim W |",deg="| net degree W | ")"
     ) 
 globalAssignment WitnessSet
@@ -32,24 +33,18 @@ dim WitnessSet := W -> ( if class W.Slice === List then #W.Slice
      else if class W.Slice === Matrix then numrows W.Slice 
      else error "ill-formed slice in WitnessSet" )
 codim WitnessSet := {} >> o -> W -> numgens ring W - dim W
-ring WitnessSet := W -> if class W.Equations === Ideal then ring W.Equations else ring ideal equations W
+ring WitnessSet := W -> if member(class W.Equations, {Ideal,PolySystem}) then ring W.Equations else ring ideal equations W
 degree WitnessSet := W -> #W.Points
 ideal WitnessSet := W -> if class W.Equations === PolySystem then ideal W.Equations else W.Equations
+declareIrreducible = method()
+declareIrreducible WitnessSet := W -> W.cache.IsIrreducible = true 
 
 witnessSet = method(TypicalValue=>WitnessSet)
-witnessSet (Ideal,Ideal,List) := (I,S,P) -> 
-  new WitnessSet from { Equations => I, Slice => sliceEquationsToMatrix S, Points => VerticalList P, IsIrreducible=>null }
-witnessSet (Ideal,Matrix,List) := (I,S,P) -> 
-  new WitnessSet from { Equations => I, Slice => S, Points => VerticalList P, IsIrreducible=>null}
 witnessSet (PolySystem,Matrix,List) := (F,S,P) -> 
-  new WitnessSet from { Equations => F, Slice => S, Points => VerticalList P, IsIrreducible=>null}
-witnessSet (PolySystem,PolySystem,List) := (I,S,P) -> 
-  new WitnessSet from { 
-      Equations => ideal equations I, 
-      Slice => sliceEquationsToMatrix ideal equations S, 
-      Points => VerticalList P, 
-      IsIrreducible=>null 
-      }
+  new WitnessSet from { Equations => F, Slice => S, Points => VerticalList P, cache => new CacheTable from {IsIrreducible=>null}}
+witnessSet (Ideal,Ideal,List) := (I,S,P) -> witnessSet (I, sliceEquationsToMatrix S, P)
+witnessSet (Ideal,Matrix,List) := (I,S,P) -> witnessSet (polySystem I, S, P)
+witnessSet (PolySystem,PolySystem,List) := (F,S,P) -> witnessSet (F, sliceEquationsToMatrix ideal equations S, P)
 
 -- points = method() -- strips all info except coordinates, returns a doubly-nested list
 -- points WitnessSet := W -> apply(W.Points, coordinates) -- return Points (not just coordinates)???
@@ -89,7 +84,12 @@ sliceEquationsToMatrix Ideal := I -> (
 
 projectiveWitnessSet = method(TypicalValue=>ProjectiveWitnessSet)
 projectiveWitnessSet (Ideal,Matrix,Matrix,List) := (I,C,S,P) -> 
-  new WitnessSet from { Equations => I, AffineChart => C, Slice => S, Points => VerticalList P, IsIrreducible=>null}
+  new WitnessSet from { 
+      Equations => I, 
+      AffineChart => C, 
+      Slice => S, 
+      Points => VerticalList P, 
+      cache => new CacheTable from {IsIrreducible=>null}}
 
 TEST /// --WitnessSet
 CC[x,y,z]
@@ -174,16 +174,19 @@ numericalAffineSpace PolynomialRing := R -> (
     C := coefficientRing R; 
     A := random(C^n,C^n);
     b := random(C^n,C^1);
-    numericalVariety {witnessSet(ideal R, A|(-b), {point entries transpose solve(A,b)})}
+    W := witnessSet(ideal R, A|(-b), {point entries transpose solve(A,b)});
+    declareIrreducible W;
+    numericalVariety {W}
     )
-projectiveNumericalVariety = method(TypicalValue=>ProjectiveNumericalVariety)
+-- ProjectiveNumericalVariety is not a type!
+projectiveNumericalVariety = method( -* TypicalValue=>ProjectiveNumericalVariety *- )
 projectiveNumericalVariety List := Ws -> new ProjectiveNumericalVariety from numericalVariety Ws
 
 check NumericalVariety := o-> V -> (
-     if any(keys V, k->(class k =!= ZZ or k<0)) 
-     then error "the keys of a NumericalVariety should be nonnegative integers";
-     scan(keys V, k->if class k === ZZ then scan(V#k, W->(
-		    if dim W != k then 
-		    error "dimension of a witness set does not match the key in NumericalVariety";
-		    )));
-     )
+    if any(keys V, k->(class k =!= ZZ or k<0)) 
+    then error "the keys of a NumericalVariety should be nonnegative integers";
+    scan(keys V, k->if class k === ZZ then scan(V#k, W->(
+		if dim W != k then 
+		error "dimension of a witness set does not match the key in NumericalVariety";
+		)));
+    )

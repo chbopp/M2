@@ -25,8 +25,8 @@ newPackage(
 	     {Name => "Hal Schenck"},
 	     {Name => "Claudiu Raicu", Email => "claudiu@math.berkeley.edu", HomePage => "http://math.berkeley.edu/~claudiu/"}
 	     },
-    	Headline => "representation rings of general linear groups and of symmetric groups",
-    	DebuggingMode => true
+	Keywords => {"Representation Theory"},
+    	Headline => "representation rings of general linear groups and of symmetric groups"
 --	AuxiliaryFiles => true
     	)
 
@@ -69,21 +69,14 @@ SchurRing.synonym = "Schur ring"
 ClassFunction = new Type of HashTable
 ClassFunction.synonym = "Class function"
 
-expression SchurRing := S -> new FunctionApplication from { schurRing, (expression last S.baseRings, S.Symbol, S.numgens ) }
+describe SchurRing := S -> Describe (expression schurRing) (expression last S.baseRings, S.Symbol, S.numgens)
+undocumented (describe, SchurRing)
+
+expression SchurRing := S -> (
+    if hasAttribute(S, ReverseDictionary)
+    then toString getAttribute(S, ReverseDictionary)
+    else new FunctionApplication from unhold describe S)
 undocumented (expression, SchurRing)
-
-toExternalString SchurRing := R -> toString expression R
-undocumented (toExternalString, SchurRing),
-
-toString SchurRing := R -> (
-     if hasAttribute(R,ReverseDictionary) then toString getAttribute(R,ReverseDictionary)
-     else toString expression R)
-undocumented (toString, SchurRing)
-
-net SchurRing := R -> (
-     if hasAttribute(R,ReverseDictionary) then toString getAttribute(R,ReverseDictionary)
-     else net expression R)
-undocumented (net, SchurRing)
 
 rawmonom2partition = (m) -> (
      reverse splice apply(rawSparseListFormMonomial m, (x,e) -> e:x)
@@ -290,9 +283,9 @@ symmetricRing (Ring,ZZ) := opts -> (A,n) -> (
      	  exteriorPower(ZZ,R) := opts -> (n,r) -> plethysm(splice{n:1},r);
 --the degrees of e_i,p_i,h_i are equal to i 
 	  degsEHP := toList(1..n);
---blocks#0 are indeces for e-variables
---blocks#1 are indeces for p-variables
---blocks#2 are indeces for h-variables
+--blocks#0 are indices for e-variables
+--blocks#1 are indices for p-variables
+--blocks#2 are indices for h-variables
      	  blocks := {toList(0..(n-1)),toList(n..(2*n-1)),toList(2*n..(3*n-1))};
 --new variables for the E,H,P polynomials
      	  vrs := symbol vrs;

@@ -3,8 +3,12 @@
 --- notes: 
 
 document { 
-     Key => {partition,(partition,Function,VisibleList),
-	  (partition,Function,VisibleList,VisibleList),(partition,Function,VirtualTally)},
+     Key => {
+	  partition,
+	 (partition,Function,VisibleList),
+	 (partition,Function,VisibleList,VisibleList),
+	 (partition,Function,VirtualTally),
+	 (partition,Function,VirtualTally,VisibleList)},
      Headline => "partition a set or list by values of a function",
      Usage => "partition(f,L)\npartition(f,L,I)",
      Inputs => {
@@ -27,11 +31,11 @@ document {
 	  partition(odd, tally L)
 	  partition (even, {3,3,5},{true,false})
 	  ///,
-     "The following example parititions the generators of an ideal by degree.",
+     "The following example partitions the generators of an ideal by degree.",
      EXAMPLE lines ///
           R = QQ[a..f]
 	  I = ideal"ab,ade,ac3,d4,b3,adf,f4,e10"
 	  partition(f -> first degree f, flatten entries gens I)
      	  ///,
-     SeeAlso => {tally, partitions}
+     SeeAlso => {tally, partitions, sublists}
      }

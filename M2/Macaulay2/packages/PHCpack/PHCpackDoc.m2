@@ -49,6 +49,16 @@ doc ///
          
       The value of {\tt LastT} is the end value of the continuation parameter:
       if it equals 1, then the solver reached the end of the path properly.
+  Contributors
+    @UL {
+	{HREF("http://www.math.gatech.edu/~leykin", "Anton Leykin")},
+	{HREF("http://www.math.uic.edu/~sommars", "Jeff Sommars")},
+	{HREF("http://www.math.tamu.edu/~tbrysiewicz/", "Taylor Brysiewicz")},
+	{HREF("http://www.coreyharris.name/", "Corey Harris")},
+	{HREF("http://www.mit.edu/~diegcif/", "Diego Cifuentes")},
+	{HREF("http://www.kaiekubjas.com/", "Kaie Kubjas")},
+	{HREF("https://math.berkeley.edu/~seigal/", "Anna Seigal")},
+	}@
   Caveat
     {\bf 1.} If you are having trouble installing the package, 
     check whether the path to your PHCpack executable was set correctly. 
@@ -69,11 +79,7 @@ doc ///
       loadPackage ("PHCpack", 
       Configuration=>{"path"=>"C:/cygwin/PHC/","PHCexe"=>"./phc"}) 
 
-    {\bf 2.} If the package SimpleDoc is not found when 
-    installing {\tt PHCpack.m2}, see questions and answers 6, 7, and 8 
-    on the Macaulay2 web site.
-
-    {\bf 3.} The current version 1.8 of PHCpack.m2 was developed with version 
+    {\bf 2.} The current version 1.8 of PHCpack.m2 was developed with version 
     1.9 of Macaulay2 and with version 2.4.17 of phc.
 ///;
 
@@ -240,7 +246,7 @@ doc ///
   Headline
     Option to specify the dimension to begin searching for positive dimensional components
   Usage
-    numericalIrreducibleDecompositon(...,StartDimension=>ZZ)
+    numericalIrreducibleDecomposition(...,StartDimension=>ZZ)
 ///;
 
 doc ///
@@ -271,7 +277,6 @@ doc ///
     constructs an embedding of a polynomial system
   Usage
     constructEmbedding(f,k)
-    constructEmbedding(f,k,Verbose=>true)
   Inputs
     f:List
       of polynomials
@@ -413,13 +418,13 @@ doc ///
 doc ///
   Key 
     isCoordinateZero
-    (isCoordinateZero,Point,ZZ,RR)
+    (isCoordinateZero,AbstractPoint,ZZ,RR)
   Headline
     checks if coordinate has absolute value less than a given tolerance
   Usage
     isCoordinateZero(sol,k,tol)
   Inputs
-    sol:Point
+    sol:AbstractPoint
       solution to a polynomial system
     k:ZZ
       index of coordinate
@@ -460,7 +465,7 @@ doc ///
 doc ///
   Key
     isWitnessSetMember
-    (isWitnessSetMember,WitnessSet,Point)
+    (isWitnessSetMember,WitnessSet,AbstractPoint)
   Headline
     tests whether a point belongs to a solution set
   Usage
@@ -468,7 +473,7 @@ doc ///
   Inputs
     W:WitnessSet
       positive dimensional, properly embedded with slack variables
-    p:Point
+    p:AbstractPoint
   Outputs
     :Boolean
       true if p is a member of the solution set of W, 
@@ -504,7 +509,7 @@ doc ///
     isWitnessSetMember(...,Verbose=>Boolean)
   Description
     Text
-       Use {\tt Verbose=>true} for additional output which includes the 
+       Use {\tt Verbose=>true} for additional output, which includes the 
        input and solution file names used by {\tt phc}.  
 
     Example
@@ -513,7 +518,6 @@ doc ///
       V = numericalIrreducibleDecomposition (system);
       W = first V#4;
       isWitnessSetMember(W, point{{0,0,0,0,0,0}})      
-      isWitnessSetMember(W, point{{0,0,0,0,0,0}},Verbose=>true)      
 ///;
 
 -----------------
@@ -628,7 +632,7 @@ doc ///
     flag to switch to double double or quad double precision
   Description
     Text
-      By default, all computations occur in hardward double precision.
+      By default, all computations occur in hardware double precision.
       While this precision could be large enough to obtain accurate
       results, for larger problems, one may need to increase the
       precision to double double or to quad double precision.
@@ -833,7 +837,7 @@ doc ///
       V=numericalIrreducibleDecomposition(system)
       WitSets=V#5; --witness sets are accessed by dimension
       w=first WitSets;
-      w#IsIrreducible  
+      w.cache.IsIrreducible  
     
     Text
     
@@ -864,12 +868,11 @@ doc ///
     refines solutions of a system by increasing working precision
   Usage
     newSols = refineSolutions(f,sols,dp)
-    newSols = refineSolutions(f,sols,dp,Verbose=>true)
   Inputs
     f:List
       a system of polynomials
     sols:List
-      solutions of the sytem f, each of type @TO Point@ 
+      solutions of the system f, each of type @TO AbstractPoint@ 
       (from a previous calculation)
     dp:ZZ
       the number of decimal places in working precision
@@ -883,7 +886,7 @@ doc ///
     Item
       invokes the command {\tt phc -v} (with option 3),
     Item 
-      stores phc output in a termporary file,
+      stores phc output in a temporary file,
     Item 
       parses and prints the refined solutions.
   Description
@@ -962,8 +965,8 @@ doc ///
       sols = solveRationalSystem(system)
       
     Text
-      The solutions are of type @TO Point@. Each Point comes with 
-      diagnostics. For example, {\tt LastT} is the end value of the 
+      The solutions are of type @TO Point@. Each point {\tt p} comes with cached 
+      diagnostics. For example, {\tt p.cache.LastT} is the end value of the 
       continuation parameter; if it equals 1, 
       then the solver reached the end of the path properly.  
     
@@ -1003,7 +1006,6 @@ doc ///
     a numerical blackbox solver
   Usage
     solveSystem(S)
-    solveSystem(S,Verbose=>true)
     solveSystem(S,numThreads=>4)
     solveSystem(S,computingPrecision=>2)
     solveSystem(S,randomSeed=>12345)
@@ -1040,10 +1042,10 @@ doc ///
     Example
       L = solveSystem(S)
     Text
-      The method {\tt solveSystem} prints the the {\tt PHCpack} input and output file names 
+      The method {\tt solveSystem} prints the {\tt PHCpack} input and output file names 
       and returns two solutions. The solutions are of type @TO Point@, defined in @TO NAGtypes@. 
-      Each Point comes with diagnostics.
-      For example, {\tt LastT} is the end value of the continuation parameter; 
+      Each point {\tt p} comes with cached diagnostics.
+      For example, {\tt p.cache.LastT} is the end value of the continuation parameter; 
       if it equals 1, then the solver reached the end of the path properly.
     
     Example

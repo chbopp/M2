@@ -24,9 +24,11 @@ newPackage(
 	     {Name => "Sonja Petrovic", Email => "petrovic@psu.edu"}
 	     },
     	Headline => "Interface to 4ti2",
+	Keywords => {"Interfaces"},
 	Configuration => { "path" => "",
 	     "keep files" => true
 	      },
+	PackageExports => {"Polyhedra"}, -- for hilbertBasis
     	DebuggingMode => false
     	)
 
@@ -38,16 +40,27 @@ export {
      "toricGroebner",
      "toricCircuits",
      "toricGraver",
-     "hilbertBasis",
-     "rays",
+     "toricGraverDegrees",
+     -- "hilbertBasis", -- defined in Polyhedra
      "InputType",
-     "toricGraverDegrees"
      }
 
+-- for backward compatibility
+if not programPaths#?"4ti2" and FourTiTwo#Options#Configuration#"path" != ""
+    then programPaths#"4ti2" = FourTiTwo#Options#Configuration#"path"
 
-path'4ti2 = (options FourTiTwo).Configuration#"path"
--- NOTE: the absolute path should be put into the .init file for 4ti2 inside the .Macaulay2 directory.
-if path'4ti2 == "" then path'4ti2 = prefixDirectory | currentLayout#"programs"
+fourTiTwo = null
+debugLimit = 5
+
+run4ti2 = (exe, args) -> (
+    if fourTiTwo === null then
+	fourTiTwo = findProgram("4ti2", "markov -h",
+	    Prefix => {(".*", "4ti2-"), -- debian
+		       (".*", "4ti2_")}, -- suse
+	    AdditionalPaths =>
+		{"/usr/lib/4ti2/bin", "/usr/lib64/4ti2/bin"}); -- fedora
+     runProgram(fourTiTwo, exe, args)
+)
 
 getFilename = () -> (
      filename := temporaryFileName();
@@ -96,27 +109,26 @@ toBinomial(Matrix,Ring) := (M,S) -> (
      ideal apply(entries M, toBinom)
      )
 
-toricMarkov = method(Options=> {InputType => null})
+toricMarkov = method(Options=> {InputType => null, Precision => 64})
 toricMarkov Matrix := Matrix => o -> (A) -> (
      filename := getFilename();
-     << "using temporary file name " << filename << endl;
+     if debugLevel >= debugLimit then << "using temporary file name " << filename << endl;
      if o.InputType === "lattice" then
      	  F := openOut(filename|".lat")
      else 
        	  F = openOut(filename|".mat");
      putMatrix(F,A);
      close F;
-     execstr := path'4ti2|"markov -q " |rootPath |filename;
-     ret := run(execstr);
-     if ret =!= 0 then error "error occurred while executing external program 4ti2: markov";
+     run4ti2("markov",
+	 "-p " | toString o.Precision | " " | rootPath | filename);
      getMatrix(filename|".mar")
      )
 toricMarkov(Matrix,Ring) := o -> (A,S) -> toBinomial(toricMarkov(A,o), S)
 
-toricGroebner = method(Options=>{Weights=>null})
+toricGroebner = method(Options=>{Weights=>null, Precision => 64})
 toricGroebner Matrix := o -> (A) -> (
      filename := getFilename();
-     << "using temporary file name " << filename << endl;
+     if debugLevel >= debugLimit then << "using temporary file name " << filename << endl;
      F := openOut(filename|".mat");
      putMatrix(F,A);
      close F;
@@ -124,67 +136,60 @@ toricGroebner Matrix := o -> (A) -> (
 	  cost := concatenate apply(o.Weights, x -> (x|" "));
 	  (filename|".cost") << "1 " << #o.Weights << endl << cost << endl  << close;
 	  );
-     execstr := path'4ti2|"groebner -q "|rootPath|filename;
-     ret := run(execstr);
-     if ret =!= 0 then error "error occurred while executing external program 4ti2: groebner";
+     run4ti2("groebner",
+	 "-p " | toString o.Precision | " " | rootPath | filename);
      getMatrix(filename|".gro")
      )
 toricGroebner(Matrix,Ring) := o -> (A,S) -> toBinomial(toricGroebner(A,o), S)
 
-toricCircuits = method()
-toricCircuits Matrix := Matrix => (A ->(
+toricCircuits = method(Options => {Precision => 64})
+toricCircuits Matrix := Matrix => (o -> A ->(
      filename := getFilename();
-     << "using temporary file name " << filename << endl;
+     if debugLevel >= debugLimit then << "using temporary file name " << filename << endl;
      F := openOut(filename|".mat");
      putMatrix(F,A);
      close F;
-     execstr := path'4ti2|"circuits -q " | rootPath | filename;
-     ret := run(execstr);
-     if ret =!= 0 then error "error occurred while executing external program 4ti2: circuits";
+     run4ti2("circuits",
+	 "-p " | toString o.Precision | " " | rootPath | filename);
      getMatrix(filename|".cir")
      ))
 
-toricGraver = method()
-toricGraver Matrix := Matrix => (A ->(
+toricGraver = method(Options => {Precision => 32})
+toricGraver Matrix := Matrix => (o -> A ->(
      filename := getFilename();
-     << "using temporary file name " << filename << endl;
+     if debugLevel >= debugLimit then << "using temporary file name " << filename << endl;
      F := openOut(filename|".mat");
      putMatrix(F,A);
      close F;
-     execstr := path'4ti2|"graver -q " | rootPath | filename;
-     ret := run(execstr);
-     if ret =!= 0 then error "error occurred while executing external program 4ti2: graver";
+     run4ti2("graver",
+	 "-q -p " | toString o.Precision | " " | rootPath | filename);
      getMatrix(filename|".gra")
      ))
-toricGraver (Matrix,Ring) := Ideal => ((A,S)->toBinomial(toricGraver(A),S))
+toricGraver (Matrix,Ring) := Ideal => (o -> (A,S)->toBinomial(toricGraver(A),S))
 
-hilbertBasis = method(Options=> {InputType => null})
-hilbertBasis Matrix := Matrix => o -> (A ->(
+-- hilbertBasis is defined in Polyhedra
+hilbertBasis Matrix := Matrix => { InputType => null, Precision => 32 } >> o -> A -> (
      filename := getFilename();
-     << "using temporary file name " << filename << endl;
+     if debugLevel >= debugLimit then << "using temporary file name " << filename << endl;
      if o.InputType === "lattice" then
      	  F := openOut(filename|".lat")
      else 
        	  F = openOut(filename|".mat");
      putMatrix(F,A);
      close F;
-     execstr := path'4ti2|"hilbert -q " |rootPath | filename;
-     ret := run(execstr);
-     if ret =!= 0 then error "error occurred while executing external program 4ti2: hilbert";
+     run4ti2("hilbert",
+	 "-p " | toString o.Precision | " " | rootPath | filename);
      getMatrix(filename|".hil")
-     ))
+     )
 
-
-rays = method()
-rays Matrix := Matrix => (A ->(
+rays Matrix := Matrix => { Precision => 64 } >> o -> (A ->(
      filename := getFilename();
-     << "using temporary file name " << filename << endl;
+     if debugLevel >= debugLimit then << "using temporary file name " << filename << endl;
      F := openOut(filename|".mat");
      putMatrix(F,A);
      close F;
-     execstr := path'4ti2|"rays -q " |rootPath | filename;
-     ret := run(execstr);
-     if ret =!= 0 then error "error occurred while executing external program 4ti2: rays";
+     run4ti2("rays",
+	 "-p " | toString o.Precision | " " | rootPath | filename);
      getMatrix(filename|".ray")
      ))
 
@@ -193,19 +198,17 @@ rays Matrix := Matrix => (A ->(
 -- the way 4ti2 does this is you tell it the whatever.mar or whatever.cir file and it writes the degrees
 -- to the screen.
 -- On the other hand, it doesn't matter because you can ask M2 for those degrees directly! 
-toricGraverDegrees = method()
-toricGraverDegrees Matrix := Matrix => (A ->(
+toricGraverDegrees = method(Options => {Precision => 32})
+toricGraverDegrees Matrix := Matrix => (o -> A ->(
      filename := getFilename();
-     << "using temporary file name " << filename << endl;
+     if debugLevel >= debugLimit then << "using temporary file name " << filename << endl;
      F := openOut(filename|".mat");
      putMatrix(F,A);
      close F;
-     execstr := path'4ti2|"graver -q " | rootPath | filename;
-     ret := run(execstr);
-     if ret =!= 0 then error "error occurred while executing external program 4ti2: graver"; -- getMatrix(filename|".gra")
-     execstr = path'4ti2|"output --degrees " | rootPath | filename|".gra";
-     ret = run(execstr);
-     if ret =!= 0 then error "error occurred while executing external program 4ti2: output";
+     run4ti2("graver",
+	 "-p " | toString o.Precision | " " | rootPath | filename);
+     ret := run4ti2("output", "--degrees " | rootPath | filename|".gra");
+     print ret#"output"
      ))
 
 
@@ -317,7 +320,7 @@ doc ///
           toBinomial
      	  (toBinomial, Matrix, Ring)	  
      Headline
-     	  creates a toric ideal from a given set of exponents of its generators; equivalent to "output --binomials" in 4ti2
+     	  creates a toric ideal from a given set of exponents of its generators
      Usage
      	  toBinomial(M,R)
      Inputs
@@ -328,7 +331,8 @@ doc ///
      	  I: Ideal
      Description
      	  Text
-	       Returns the ideal in the ring {\tt R} generated by the binomials corresponding to rows of {\tt M}
+	       Equivalent to "output --binomials" in 4ti2.
+	       Returns the ideal in the ring {\tt R} generated by the binomials corresponding to rows of {\tt M}.
 	  Example
 	       A = matrix "1,1,1,1; 1,2,3,4"
 	       B = syz A 
@@ -342,6 +346,7 @@ doc ///
           (toricGroebner, Matrix)
      	  (toricGroebner, Matrix, Ring)
      	  [toricGroebner, Weights]
+	  [toricGroebner, Precision]
      Headline
      	  calculates a Groebner basis of the toric ideal I_A, given A; invokes "groebner" from 4ti2
      Usage
@@ -351,6 +356,9 @@ doc ///
 	       whose columns parametrize the toric variety. The toric ideal $I_A$ is the kernel of the map defined by {\tt A}.
      	  R:Ring
 	       ring with as least as many generators as the columns of {\tt A}
+	  Precision => {ZZ, String}
+	       32, 64, or "arbitrary", the precision of the integers used during
+	       the computation
      Outputs
      	  B:Matrix 
 	       whose rows give binomials that form a Groebner basis of the toric ideal of {\tt A}
@@ -382,6 +390,7 @@ doc ///
           (toricMarkov, Matrix)
 	  (toricMarkov, Matrix, Ring)
 	  [toricMarkov, InputType]
+	  [toricMarkov, Precision]
      Headline
      	  calculates a generating set of the toric ideal I_A, given A; invokes "markov" from 4ti2
      Usage
@@ -391,13 +400,16 @@ doc ///
 	       whose columns parametrize the toric variety; the toric ideal is the kernel of the map defined by {\tt A}.
 	       Otherwise, if InputType is set to "lattice", the rows of {\tt A} are a lattice basis and the toric ideal is the 
 	       saturation of the lattice basis ideal.	       
-	  s:InputType
+	  InputType=>String
 	       which is the string "lattice" if rows of {\tt A} specify a lattice basis
 	  R:Ring
 	       polynomial ring in which the toric ideal $I_A$ should live
+	  Precision => {ZZ, String}
+	       32, 64, or "arbitrary", the precision of the integers used during
+	       the computation
      Outputs
      	  B:Matrix 
-	       whose rows form a Markov Basis of the lattice $\{z {\rm integral} : A z = 0\}$
+	       whose rows form a Markov Basis of the lattice $\{z : z \text{ is integral and } A z = 0\}$
 	       or the lattice spanned by the rows of {\tt A} if the option {\tt InputType => "lattice"} is used
      Description
      	  Text
@@ -435,6 +447,7 @@ doc ///
      	  toricGraver
           (toricGraver, Matrix)
      	  (toricGraver, Matrix, Ring)
+	  [toricGraver, Precision]
      Headline
      	  calculates the Graver basis of the toric ideal; invokes "graver" from 4ti2
      Usage
@@ -444,6 +457,9 @@ doc ///
 	       whose columns parametrize the toric variety. The toric ideal $I_A$ is the kernel of the map defined by {\tt A}
 	  R:Ring
 	       polynomial ring in which the toric ideal $I_A$ should live
+	  Precision => {ZZ, String}
+	       32, 64, or "gmp", the precision of the integers used during the
+	       computation
      Outputs
      	  B:Matrix 
 	       whose rows give binomials that form the Graver basis of the toric ideal of {\tt A}, or
@@ -469,16 +485,21 @@ doc ///
      Key
      	  toricGraverDegrees
           (toricGraverDegrees, Matrix)
+	  [toricGraverDegrees, Precision]
      Headline
-     	  displays the degrees of all Graver basis elements for the toric ideal I_A; equivalent to "output --degrees foo.gra" in 4ti2
+     	  displays the degrees of all Graver basis elements for the toric ideal I_A
      Usage
      	  toricGraverDegrees(A) 
      Inputs
       	  A:Matrix    
 	       whose columns parametrize the toric variety. The toric ideal $I_A$ is the kernel of the map defined by {\tt A}
+	  Precision => {ZZ, String}
+	       32, 64, or "gmp", the precision of the integers used during the
+	       computation
      Description
      	  Text
-	       Very often the Graver basis consits of too many binomials, and one is only interested in their degrees. In this case,
+	       Equivalent to "output --degrees foo.gra" in 4ti2.
+	       Very often the Graver basis consists of too many binomials, and one is only interested in their degrees. In this case,
 	       instead of looking at the Graver basis of $I_A$, we may just want to look for the degrees of binomials which show up:
 	  Example
 	       A = matrix "1,1,1,1; 1,2,3,4"
@@ -503,9 +524,9 @@ doc ///
 
 doc ///
      Key
-     	  hilbertBasis
           (hilbertBasis, Matrix)
-	  [hilbertBasis, InputType]
+	 [(hilbertBasis, Matrix), InputType]
+	 [(hilbertBasis, Matrix), Precision]
      Headline
      	  calculates the Hilbert basis of the cone; invokes "hilbert" from 4ti2
      Usage
@@ -513,10 +534,15 @@ doc ///
      Inputs
       	  A:Matrix    
 	       defining the cone $\{z : Az = 0, z \ge 0 \}$
+	  InputType => String
+	       use the string "lattice" if rows of {\tt A} specify a lattice basis
+	  Precision => {ZZ, String}
+	       32, 64, or "gmp", the precision of the integers used during the
+	       computation
      Outputs
      	  B:Matrix 
 	       whose rows form the Hilbert basis of the cone $\{z : Az = 0, z \ge 0 \}$
-	       or the cone $\{z A : z {\rm {} is an integral vector and } z A \ge 0 \}$ if {\tt InputType => "lattice"} is used
+	       or the cone $\{z A : z \text{ is an integral vector and } z A \ge 0 \}$ if {\tt InputType => "lattice"} is used
      Description
 	  Example
 	       A = matrix "1,1,1,1; 1,2,3,4"
@@ -528,7 +554,6 @@ doc ///
 
 doc ///
      Key
-     	  rays
           (rays, Matrix)
      Headline
      	  calculates the extreme rays of the cone; invokes "rays" from 4ti2
@@ -537,6 +562,9 @@ doc ///
      Inputs
       	  A:Matrix   
 	       defining the cone $\{z : Az = 0, z \ge 0 \}$
+	  Precision => {ZZ, String}
+	       32, 64, or "arbitrary", the precision of the integers used during
+	       the computation
      Outputs
      	  B:Matrix 
 	       whose rows are the extreme rays of the cone $\{z : Az = 0, z \ge 0 \}$
@@ -553,6 +581,7 @@ doc ///
      Key
      	  toricCircuits
           (toricCircuits, Matrix)
+	  [toricCircuits, Precision]
      Headline
      	  calculates the circuits of the toric ideal; invokes "circuits" from 4ti2
      Usage
@@ -560,6 +589,9 @@ doc ///
      Inputs
       	  A:Matrix    
                whose columns parametrize the toric variety. The toric ideal $I_A$ is the kernel of the map defined by {\tt A} 
+	  Precision => {ZZ, String}
+	       32, 64, or "arbitrary", the precision of the integers used during
+	       the computation
      Outputs
      	  B:Matrix 
 	       whose rows form the circuits of A
@@ -616,7 +648,7 @@ TEST ///
   R=CC[x_0,x_1,x_2,x_3]
   A = matrix "1,1,1,1; 1,2,3,4"
   C = toricCircuits(A)  --circuits returned by 4ti2
-  Icir = toBinomial(C,R) -- circuit ideal returend by 4ti2
+  Icir = toBinomial(C,R) -- circuit ideal returned by 4ti2
   Ctrue = matrix{{0,1,-2,1},{1,-2,1,0},{1,0,-3,2},{2,-3,0,1}} --known: all circuits
   IcirTrue = toBinomial(Ctrue,R) --known: circuit ideal
   Irnc3 = ideal(x_0*x_2-x_1^2,x_1*x_3-x_2^2,x_0*x_3-x_1*x_2)
@@ -791,7 +823,7 @@ rays, circuits, qsolve
 also: minimise, walk, normalform
 
 a.mat: m by n
-a.rel: 1 by m: symols: >, =, <  (means: >= 0, == 0, <= 0)
+a.rel: 1 by m: symbols: >, =, <  (means: >= 0, == 0, <= 0)
 a.sign: 1 by n matrix: 0,1,-1,2
 
 a.sign: 0:  x_i unrestricted in sign
@@ -825,4 +857,4 @@ tests are in
 email Peter if I have more questions
 4ti2 google group: joined.
 
-glpk:open source linear progrmming
+glpk:open source linear programming

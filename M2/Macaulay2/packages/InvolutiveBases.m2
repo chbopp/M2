@@ -13,6 +13,8 @@ newPackage(
                   Email => "daniel@momo.math.rwth-aachen.de",
                   HomePage => "http://wwwb.math.rwth-aachen.de/~daniel/"}},
         Headline => "Methods for Janet bases and Pommaret bases in Macaulay 2",
+        PackageExports => { "Complexes" },
+	Keywords => {"Groebner Basis Algorithms"},
         DebuggingMode => false
         )
 
@@ -47,9 +49,9 @@ multVar(InvolutiveBasis) := J -> (
      v := generators ring J#0;
      apply(J#1, i->set(select(v, j -> i#j == 1))))
 
-multVar(ChainComplex, ZZ) := (C, n) -> (
+multVar(Complex, ZZ) := (C, n) -> (
      v := generators C.ring;
-     apply(C.dd#n.cache.multVars, i->set(select(v, j -> i#j == 1))))
+     apply(C.dd_n.cache.multVars, i->set(select(v, j -> i#j == 1))))
 
 
 ----------------------------------------------------------------------
@@ -419,7 +421,7 @@ janetBasis(Ideal) := I -> janetBasis gb I
 
 janetBasis(Module) := M -> janetBasis presentation M
 
-janetBasis(ChainComplex, ZZ) := (C, n) -> new InvolutiveBasis from hashTable {0 => C.dd#n, 1 => C.dd#n.cache.multVars}
+janetBasis(Complex, ZZ) := (C, n) -> new InvolutiveBasis from hashTable {0 => C.dd_n, 1 => C.dd_n.cache.multVars}
 
 
 -- given a Janet basis J for a submodule of a free module
@@ -566,7 +568,7 @@ invSyzygies(InvolutiveBasis) := J -> (
 -- given an ideal of a polynomial ring or a module over a polynomial ring,
 -- construct a free resolution using Janet bases for this ideal or this module
 
-janetResolution = method(TypicalValue => ChainComplex)
+janetResolution = method(TypicalValue => Complex)
 
 janetResolution(InvolutiveBasis) := J -> (
      R := { sortByClass(J) };
@@ -577,8 +579,8 @@ janetResolution(InvolutiveBasis) := J -> (
 	  S = invSyzygies R#(-1);
           S = (map(source schreyerOrder leadTerm R#(-1)#0, source S#0, S#0), S#1);
      );
-     C := chainComplex(apply(R, i->i#0) | { map(source R#-1#0, (ring R#0#0)^0, 0) });
-     for i from 1 to length(R) do C.dd#i.cache.multVars = R#(i-1)#1;
+     C := complex(apply(R, i->i#0) | { map(source R#-1#0, (ring R#0#0)^0, 0) });
+     for i from 1 to length(R) do C.dd_i.cache.multVars = R#(i-1)#1;
      C)
 
 janetResolution(Matrix) := M -> janetResolution janetBasis M
@@ -587,7 +589,8 @@ janetResolution(Ideal) := I -> janetResolution janetBasis I
 
 janetResolution(Module) := M -> janetResolution janetBasis presentation M
 
-addHook(Module, symbol resolution, (opts,M) -> if opts.Strategy === Involutive then break janetResolution M)
+addHook((freeResolution, Module), Strategy => Involutive, (opts, M) ->
+    if opts.Strategy === Involutive then janetResolution M)
 
 
 -- enumeration of a (monomial) vector space basis of R/I
@@ -770,7 +773,7 @@ document {
 	     "J. Apel, The theory of involutive divisions and an application to Hilbert function computations. J. Symb. Comp. 25(6), 1998, pp. 683-704.",
              TEX "V. P. Gerdt, Involutive Algorithms for Computing Gr\\\"obner Bases. In: Cojocaru, S. and Pfister, G. and Ufnarovski, V. (eds.), Computational Commutative and Non-Commutative Algebraic Geometry, NATO Science Series, IOS Press, pp. 199-225.",
              "V. P. Gerdt and Y. A. Blinkov, Involutive bases of polynomial ideals. Minimal involutive bases. Mathematics and Computers in Simulation 45, 1998, pp. 519-541 resp. 543-560.",
-             "M. Janet, Lecons sur les systemes des equationes aux derivees partielles. Cahiers Scientifiques IV. Gauthiers-Villars, Paris, 1929.",
+             "M. Janet, Leçons sur les systèmes des équations aux dérivées partielles. Cahiers Scientifiques IV. Gauthiers-Villars, Paris, 1929.",
              "J.-F. Pommaret, Partial Differential Equations and Group Theory. Kluwer Academic Publishers, 1994.",
              "W. Plesken and D. Robertz, Janet's approach to presentations and resolutions for polynomials and linear pdes. Archiv der Mathematik 84(1), 2005, pp. 22-37.",
 	     TEX "D. Robertz, Janet Bases and Applications. In: Rosenkranz, M. and Wang, D. (eds.), Gr\\\"obner Bases in Symbolic Analysis, Radon Series on Computational and Applied Mathematics 2, de Gruyter, 2007, pp. 139-168.",
@@ -813,12 +816,12 @@ document {
         }
 
 document {
-        Key => {multVar,(multVar,InvolutiveBasis),(multVar,ChainComplex,ZZ),(multVar,FactorModuleBasis)},
+        Key => {multVar,(multVar,InvolutiveBasis),(multVar,Complex,ZZ),(multVar,FactorModuleBasis)},
         Headline => "extract the sets of multiplicative variables for each generator (in several contexts)",
         Usage => "m = multVar(J) or m = multVar(C,n) or m = multVar(F)",
 	Inputs => {
 	     "J" => InvolutiveBasis,
-	     "C" => ChainComplex,
+	     "C" => Complex,
 	     "n" => ZZ,
 	     "F" => FactorModuleBasis
 	     },
@@ -829,7 +832,7 @@ document {
 	     "If the argument of multVar is ", ofClass InvolutiveBasis, ", then the i-th set in m consists of the multiplicative variables for the i-th generator in J."
 	    },
 	PARA{
-	     "If the arguments of multVar are ", ofClass ChainComplex, " and ", ofClass ZZ, ", where C is the result of either ", TO "janetResolution", " or ", TO "resolution", " called with the optional argument 'Strategy => Involutive', then the i-th set in m consists of the multiplicative variables for the i-th generator in the n-th differential of C."
+	     "If the arguments of multVar are ", ofClass Complex, " and ", ofClass ZZ, ", where C is the result of either ", TO "janetResolution", " or ", TO "resolution", " called with the optional argument 'Strategy => Involutive', then the i-th set in m consists of the multiplicative variables for the i-th generator in the n-th differential of C."
 	    },
 	PARA{
 	     "If the argument of multVar is ", ofClass FactorModuleBasis, ", then the i-th set in m consists of the multiplicative variables for the i-th monomial cone in F."
@@ -843,7 +846,7 @@ document {
         EXAMPLE lines ///
           R = QQ[x,y,z];
 	  I = ideal(x,y,z);
-	  C = res(I, Strategy => Involutive)
+	  C = freeResolution(I, Strategy => Involutive)
 	  multVar(C, 2)
         ///,
         EXAMPLE lines ///
@@ -858,14 +861,14 @@ document {
         }
 
 document {
-        Key => {janetBasis,(janetBasis,Matrix),(janetBasis,Ideal),(janetBasis,GroebnerBasis),(janetBasis,ChainComplex,ZZ)},
+        Key => {janetBasis,(janetBasis,Matrix),(janetBasis,Ideal),(janetBasis,GroebnerBasis),(janetBasis,Complex,ZZ)},
         Headline => "compute Janet basis for an ideal or a submodule of a free module",
         Usage => "J = janetBasis M or J = janetBasis(C,n)",
 	Inputs => {
 	     "M" => InvolutiveBasis,
 	     "M" => Ideal,
 	     "M" => GroebnerBasis,
-	     "C" => ChainComplex,
+	     "C" => Complex,
 	     "n" => ZZ
 	     },
         Outputs => {
@@ -875,7 +878,7 @@ document {
              "If the argument for janetBasis is ", ofClass Matrix, " or ", ofClass Ideal, " or ", ofClass GroebnerBasis, ", then J is a Janet basis for (the module generated by) M."
 	    },
 	PARA{
-	     "If the arguments for janetBasis are ", ofClass ChainComplex, " and ", ofClass ZZ, ", where C is the result of either ", TO "janetResolution", " or ", TO "resolution", " called with the optional argument 'Strategy => Involutive', then J is the Janet basis extracted from the n-th differential of C."
+	     "If the arguments for janetBasis are ", ofClass Complex, " and ", ofClass ZZ, ", where C is the result of either ", TO "janetResolution", " or ", TO "resolution", " called with the optional argument 'Strategy => Involutive', then J is the Janet basis extracted from the n-th differential of C."
 	    },
         EXAMPLE lines ///
           R = QQ[x,y];
@@ -894,7 +897,7 @@ document {
         EXAMPLE lines ///
           R = QQ[x,y,z];
 	  I = ideal(x,y,z);
-	  C = res(I, Strategy => Involutive)
+	  C = freeResolution(I, Strategy => Involutive)
 	  janetBasis(C, 2)
         ///,
         SeeAlso => {janetMultVar,pommaretMultVar,isPommaretBasis,invReduce,invSyzygies,janetResolution}
@@ -1176,7 +1179,7 @@ document {
         Usage => "C = janetResolution M",
         Inputs => {{ "M, ", ofClass Matrix, " or ", ofClass Ideal, " or ", ofClass Module }},
         Outputs => {
-	   "C" => ChainComplex => { "a (non-minimal) free resolution of (the module generated by) M" }
+	   "C" => Complex => { "a (non-minimal) free resolution of (the module generated by) M" }
 	   },
 	PARA{
              "The computed Janet basis for each homological degree can be extracted with ", TO "janetBasis", "."
@@ -1197,7 +1200,7 @@ document {
         EXAMPLE lines ///
           R = QQ[x,y,z];
 	  I = ideal(x,y,z);
-	  res(I, Strategy => Involutive)
+	  freeResolution(I, Strategy => Involutive)
         ///,
         SeeAlso => {janetBasis,multVar,invSyzygies}
         }

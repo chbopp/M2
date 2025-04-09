@@ -1,10 +1,8 @@
-// Copyright 2005-2016  Michael E. Stillman
+// Copyright 2005-2021  Michael E. Stillman
 
-#if !defined(SAFEC_EXPORTS)
-#include <engine-exports.h>
-#endif
-
-#include "monhashtable.hpp"
+#include "f4/monhashtable.hpp"
+#include <string.h>  // for memset
+#include <iostream>  // for operator<<, endl, ostream, cout, basic_ostream
 
 #define HASHVALUE(m) (M->hash_value(m))
 #define MONOMIAL_EQUAL(m, n) (M->is_equal(m, n))
@@ -12,14 +10,7 @@
 template <typename ValueType>
 void MonomialHashTable<ValueType>::reset()
 {
-  // best so far
-  if (count > 0)
-    {
-      // dump();
-      // fprintf(stderr, "hashtab reset: size = %ld, count = %ld\n", size,
-      // count);
-      memset(hashtab.get(), 0, sizeof(value) * size);
-    }
+  memset(hashtab.get(), 0, sizeof(value) * size);
 
   count = 0;
   nfind_or_insert = 0;
@@ -72,68 +63,22 @@ void MonomialHashTable<ValueType>::grow()
 template <typename ValueType>
 MonomialHashTable<ValueType>::MonomialHashTable(const ValueType *M0,
                                                 int logsize0)
+  : M(M0),
+    hashtab(nullptr), // set in body
+    size(0),
+    logsize(logsize0),
+    hashmask(0),
+    threshold(0),
+    count(0),
+    nfind_or_insert(0),
+    nclashes(0),
+    max_run_length(0),
+    monequal_count(0),
+    monequal_fails(0)
 {
-  M = M0;
   initialize(logsize0);
 }
 
-template <typename ValueType>
-MonomialHashTable<ValueType>::~MonomialHashTable()
-{
-  // Nothing more to do here
-}
-
-#if 0
-template <typename ValueType>
-bool MonomialHashTable<ValueType>::find_or_insert(value m, value &result)
-{
-  long hashval = HASHVALUE(m) & hashmask;
-  nfind_or_insert++;
-  if (!hashtab[hashval])
-    {
-      // No entry is there.  So, we insert it directly.
-      hashtab[hashval] = m;
-      result = m;
-      count++;
-      if (count > threshold) grow();
-      return false;
-    }
-  else
-    {
-      // Something is there, so we need to find either this value,
-      // or a free spot, whichever comes first.
-      long mhash = HASHVALUE(m);
-      value *hashtop = hashtab.get() + size;
-      long run_len = 1;
-      for (value *i = hashtab.get() + hashval; ; i++, run_len++)
-        {
-          if (run_len > max_run_length)
-            max_run_length = run_len;
-          if (i == hashtop) i = hashtab.get();
-          if (!(*i))
-            {
-              // Spot is empty, so m is a new value
-              *i = m;
-              result = m;
-              count++;
-              if (count > threshold) grow();
-              return false;
-            }
-          if (HASHVALUE(*i) == mhash)
-            {
-              monequal_count++;
-              if (MONOMIAL_EQUAL(m, *i))
-                {
-                  result = *i;
-                  return true;
-                }
-              monequal_fails++;
-            }
-          nclashes++;
-        }
-    }
-}
-#endif
 template <typename ValueType>
 bool MonomialHashTable<ValueType>::find_or_insert(value m, value &result)
 {
@@ -180,14 +125,14 @@ bool MonomialHashTable<ValueType>::find_or_insert(value m, value &result)
 template <typename ValueType>
 void MonomialHashTable<ValueType>::dump() const
 {
-  fprintf(stderr, "--hash table info--\n");
-  fprintf(stderr, "  size of hashtable = %ld\n", size);
-  fprintf(stderr, "  number of calls   = %ld\n", nfind_or_insert);
-  fprintf(stderr, "  number of monoms  = %ld\n", count);
-  fprintf(stderr, "  number of clashes = %ld\n", nclashes);
-  fprintf(stderr, "  max run length    = %ld\n", max_run_length);
-  fprintf(stderr, "  monequal calls    = %ld\n", monequal_count);
-  fprintf(stderr, "  monequal false    = %ld\n", monequal_fails);
+  std::cout << "--hash table info--" << std::endl;
+  std::cout << "  size of hashtable = " << size << std::endl;
+  std::cout << "  number of monoms  = " << count << std::endl;
+  std::cout << "  number of calls   = " << nfind_or_insert << std::endl;
+  std::cout << "  number of clashes = " << nclashes << std::endl;
+  std::cout << "  max run length    = " << max_run_length << std::endl;
+  std::cout << "  monequal calls    = " << monequal_count << std::endl;
+  std::cout << "  monequal false    = " << monequal_fails << std::endl;
 }
 
 template <typename ValueType>
@@ -203,15 +148,15 @@ void MonomialHashTable<ValueType>::show() const
           value m = hashtab[i];
           if (nzeros > 0)
             {
-              fprintf(stderr, "-- %ld zero elements --\n", nzeros);
+              std::cerr << "-- " << nzeros << " zero elements --" << std::endl;
               nzeros = 0;
             }
-          fprintf(stderr, "hash %d monomial ", M->hash_value(m));
+          std::cerr << "hash " << M->hash_value(m) << " monomial ";
           M->show(m);
-          fprintf(stderr, "\n");
+          std::cerr << std::endl;
         }
     }
-  if (nzeros > 0) fprintf(stderr, "-- %ld zero elements --\n", nzeros);
+  if (nzeros > 0) std::cerr << "-- " << nzeros << " zero elements --" << std::endl;
 }
 
 template class MonomialHashTable<MonomialInfo>;
